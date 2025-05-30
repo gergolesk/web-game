@@ -1,34 +1,57 @@
-const playerName = prompt('Введите ваше имя:');
 const playerId = Math.random().toString(36).substr(2, 9);
 const playerColor = '#'+Math.floor(Math.random()*16777215).toString(16);
+let playerName = null;
 
 const ws = new WebSocket('ws://localhost:3000');
 
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    type: 'join',
-    id: playerId,
-    name: playerName,
-    color: playerColor
-  }));
-};
-
-let otherPlayers = {};
+let pos = { x: 100, y: 100 };
+let lastAngle = 0;
+const speed = 4;
+const keys = {};
 const otherPlayersDiv = document.getElementById('other-players');
+
+// Сначала просим сервер — можно ли войти?
+ws.onopen = () => {
+  ws.send(JSON.stringify({ type: 'can_join' }));
+};
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
+
+  // 1. Если максимум игроков — показываем сообщение и выходим
+  if (data.type === 'max_players') {
+    document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">В игре уже 4 игрока.<br>Пожалуйста, попробуйте позже.</div>';
+    ws.close();
+    return;
+  }
+
+  // 2. Разрешено — просим имя и присоединяемся
+  if (data.type === 'can_join_ok') {
+    playerName = prompt('Введите ваше имя:');
+    if (!playerName) {
+      ws.close();
+      return;
+    }
+    ws.send(JSON.stringify({
+      type: 'join',
+      id: playerId,
+      name: playerName,
+      color: playerColor
+    }));
+    return;
+  }
+
+  // 3. Состояние игры (отрисовка)
   if (data.type === 'state') {
-    // Найдём себя в списке игроков и обновим координаты и угол:
+    // Синхронизируем свою позицию и угол
     const me = data.players.find(p => p.id === playerId);
     if (me) {
       pos.x = me.x;
       pos.y = me.y;
       lastAngle = me.angle || 0;
-      // (можно также обновлять цвет и имя, если надо)
     }
 
-    // Отрисуем других игроков
+    // Показываем других игроков
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
       if (p.id === playerId) return;
@@ -58,14 +81,16 @@ ws.onmessage = (event) => {
   }
 };
 
-// Движение и управление
+// Управление Pac-Man
 const player = document.getElementById('player');
 const gameArea = document.getElementById('game-area');
 
-let pos = { x: 100, y: 100 };
-const speed = 4;
-const keys = {};
-let lastAngle = 0;
+document.addEventListener('keydown', (e) => {
+  keys[e.key.toLowerCase()] = true;
+});
+document.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
+});
 
 function getDirectionAngle() {
   const up = keys['arrowup'] || keys['w'];
@@ -84,19 +109,12 @@ function getDirectionAngle() {
   return lastAngle;
 }
 
-document.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
-});
-document.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
-
 function updatePlayer() {
   player.style.left = pos.x + 'px';
   player.style.top = pos.y + 'px';
   player.style.transform = `rotate(${lastAngle}deg)`;
 
-  // Отправляем серверу своё положение
+  // Сообщаем серверу о перемещении
   if (ws.readyState === 1) {
     ws.send(JSON.stringify({
       type: 'move',
