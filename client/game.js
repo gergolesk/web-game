@@ -9,8 +9,14 @@ let lastAngle = 0;
 const speed = 4;
 const keys = {};
 const otherPlayersDiv = document.getElementById('other-players');
+const playersListDiv = document.getElementById('players-list');
 
-// Сначала просим сервер — можно ли войти?
+// Найдём свой Pac-Man circle для управления цветом
+const player = document.getElementById('player');
+const myCircle = document.getElementById('player-circle');
+const gameArea = document.getElementById('game-area');
+
+// Сначала спрашиваем сервер, есть ли слот для входа
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'can_join' }));
 };
@@ -25,7 +31,7 @@ ws.onmessage = (event) => {
     return;
   }
 
-  // 2. Разрешено — просим имя и присоединяемся
+  // 2. Разрешено — спрашиваем имя и присоединяемся
   if (data.type === 'can_join_ok') {
     playerName = prompt('Введите ваше имя:');
     if (!playerName) {
@@ -43,15 +49,16 @@ ws.onmessage = (event) => {
 
   // 3. Состояние игры (отрисовка)
   if (data.type === 'state') {
-    // Синхронизируем свою позицию и угол
+    // Синхронизируем свою позицию, угол и цвет
     const me = data.players.find(p => p.id === playerId);
     if (me) {
       pos.x = me.x;
       pos.y = me.y;
       lastAngle = me.angle || 0;
+      if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
     }
 
-    // Показываем других игроков
+    // Показываем других игроков на поле
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
       if (p.id === playerId) return;
@@ -78,13 +85,21 @@ ws.onmessage = (event) => {
       `;
       otherPlayersDiv.appendChild(el);
     });
+
+    // Показываем список игроков сбоку
+    let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Игроки</div>';
+    data.players.forEach(p => {
+      let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
+      playersListHtml += `<div class="${playerClass}">
+          <span class="player-dot" style="background:${p.color};"></span>
+          <span>${p.name ? p.name : 'Игрок'}</span>
+        </div>`;
+    });
+    playersListDiv.innerHTML = playersListHtml;
   }
 };
 
 // Управление Pac-Man
-const player = document.getElementById('player');
-const gameArea = document.getElementById('game-area');
-
 document.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
 });

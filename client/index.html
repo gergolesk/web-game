@@ -8,22 +8,24 @@
 <body>
   <div id="game-area">
     <svg id="player" width="40" height="40" style="position:absolute; z-index:2;">
-      <defs>
+    <defs>
         <mask id="pacman-mask">
-          <circle cx="20" cy="20" r="20" fill="white"/>
-          <polygon id="mouth"
-            points="20,20 40,10 40,30"
-            fill="black"/>
+        <circle cx="20" cy="20" r="20" fill="white"/>
+        <polygon id="mouth" points="20,20 40,10 40,30" fill="black"/>
         </mask>
-      </defs>
-      <circle
+    </defs>
+    <circle
+        id="player-circle"
         cx="20" cy="20" r="20"
         fill="yellow"
         mask="url(#pacman-mask)"
-      />
+    />
     </svg>
+
     <div id="other-players"></div>
   </div>
+  <div id="players-list"></div>
   <script src="game.js"></script>
 </body>
 </html>
+

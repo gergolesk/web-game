@@ -4,15 +4,13 @@ const wss = new WebSocket.Server({ port: 3000 });
 const FIELD_WIDTH = 800;
 const FIELD_HEIGHT = 600;
 const START_POSITIONS = [
-  { x: 10,  y: 10, angle: 45 },              // левый верхний угол
-  { x: FIELD_WIDTH - 50, y: 10, angle: 135 },   // правый верхний угол
-  { x: 10,  y: FIELD_HEIGHT - 50, angle: -45 }, // левый нижний угол
-  { x: FIELD_WIDTH - 50, y: FIELD_HEIGHT - 50, angle: -135 } // правый нижний угол
+  { x: 10,  y: 10, angle: 45 },
+  { x: FIELD_WIDTH - 50, y: 10, angle: 135 },
+  { x: 10,  y: FIELD_HEIGHT - 50, angle: -45 },
+  { x: FIELD_WIDTH - 50, y: FIELD_HEIGHT - 50, angle: -135 }
 ];
 
-// Для каждого угла — id игрока (null — свободен)
 let cornerOccupants = [null, null, null, null];
-
 let players = {};
 
 function broadcastGameState() {
@@ -31,7 +29,7 @@ wss.on('connection', (ws) => {
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
 
-    // 1. Проверяем, можно ли войти (pre-join)
+    // Проверка на свободные места
     if (data.type === 'can_join') {
       const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
@@ -42,7 +40,7 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // 2. Старт игры для нового игрока
+    // Подключение игрока
     if (data.type === 'join') {
       playerId = data.id;
       myCorner = cornerOccupants.findIndex(id => id === null);
@@ -51,6 +49,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'max_players' }));
         return;
       }
+
+      // Присваиваем уникальный цвет, который сохраняется на сервере
       cornerOccupants[myCorner] = playerId;
       players[playerId] = {
         id: playerId,
@@ -66,7 +66,7 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // 3. Движение игрока
+    // Движение игрока
     if (data.type === 'move' && playerId && players[playerId]) {
       players[playerId].x = data.x;
       players[playerId].y = data.y;
