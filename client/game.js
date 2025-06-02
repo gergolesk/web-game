@@ -6,17 +6,13 @@ const ws = new WebSocket('ws://localhost:3000');
 
 let pos = { x: 100, y: 100 };
 let lastAngle = 0;
-const speed = 4;
 const keys = {};
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
-
-// Найдём свой Pac-Man circle для управления цветом
 const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
 const gameArea = document.getElementById('game-area');
 
-// Сначала спрашиваем сервер, есть ли слот для входа
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'can_join' }));
 };
@@ -24,16 +20,14 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
 
-  // 1. Если максимум игроков — показываем сообщение и выходим
   if (data.type === 'max_players') {
-    document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">В игре уже 4 игрока.<br>Пожалуйста, попробуйте позже.</div>';
+    document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">There are already 4 players in the game.<br>Please try later</div>';
     ws.close();
     return;
   }
 
-  // 2. Разрешено — спрашиваем имя и присоединяемся
   if (data.type === 'can_join_ok') {
-    playerName = prompt('Введите ваше имя:');
+    playerName = prompt('Enter your name:');
     if (!playerName) {
       ws.close();
       return;
@@ -47,9 +41,7 @@ ws.onmessage = (event) => {
     return;
   }
 
-  // 3. Состояние игры (отрисовка)
   if (data.type === 'state') {
-    // Синхронизируем свою позицию, угол и цвет
     const me = data.players.find(p => p.id === playerId);
     if (me) {
       pos.x = me.x;
@@ -58,7 +50,6 @@ ws.onmessage = (event) => {
       if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
     }
 
-    // Показываем других игроков на поле
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
       if (p.id === playerId) return;
@@ -86,8 +77,7 @@ ws.onmessage = (event) => {
       otherPlayersDiv.appendChild(el);
     });
 
-    // Показываем список игроков сбоку
-    let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Игроки</div>';
+    let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
     data.players.forEach(p => {
       let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
       playersListHtml += `<div class="${playerClass}">
@@ -99,7 +89,6 @@ ws.onmessage = (event) => {
   }
 };
 
-// Управление Pac-Man
 document.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
 });
@@ -128,41 +117,27 @@ function updatePlayer() {
   player.style.left = pos.x + 'px';
   player.style.top = pos.y + 'px';
   player.style.transform = `rotate(${lastAngle}deg)`;
-
-  // Сообщаем серверу о перемещении
-  if (ws.readyState === 1) {
-    ws.send(JSON.stringify({
-      type: 'move',
-      id: playerId,
-      x: pos.x,
-      y: pos.y,
-      angle: lastAngle
-    }));
-  }
 }
 
 function gameLoop() {
   let dx = 0, dy = 0;
+  if (keys['arrowup'] || keys['w']) dy -= 1;
+  if (keys['arrowdown'] || keys['s']) dy += 1;
+  if (keys['arrowleft'] || keys['a']) dx -= 1;
+  if (keys['arrowright'] || keys['d']) dx += 1;
 
-  const up = keys['arrowup'] || keys['w'];
-  const down = keys['arrowdown'] || keys['s'];
-  const left = keys['arrowleft'] || keys['a'];
-  const right = keys['arrowright'] || keys['d'];
+  const norm = Math.sqrt(dx * dx + dy * dy);
 
-  if (up) dy -= 1;
-  if (down) dy += 1;
-  if (left) dx -= 1;
-  if (right) dx += 1;
-
-  if (dx !== 0 || dy !== 0) {
-    const norm = Math.sqrt(dx * dx + dy * dy);
-    pos.x += speed * dx / norm;
-    pos.y += speed * dy / norm;
-    lastAngle = getDirectionAngle();
+  if (ws.readyState === 1) {
+    //console.log('Send:', {dx, dy, norm});
+    ws.send(JSON.stringify({
+      type: 'move',
+      id: playerId,
+      dx: norm > 0 ? dx / norm : 0,
+      dy: norm > 0 ? dy / norm : 0,
+      angle: getDirectionAngle()
+    }));
   }
-
-  pos.x = Math.max(0, Math.min(pos.x, gameArea.offsetWidth - 40));
-  pos.y = Math.max(0, Math.min(pos.y, gameArea.offsetHeight - 40));
 
   updatePlayer();
   requestAnimationFrame(gameLoop);
