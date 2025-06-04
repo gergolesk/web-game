@@ -1,28 +1,39 @@
+import { gameConfig } from './config';
+
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 3000 });
 
-const FIELD_WIDTH = 800;
-const FIELD_HEIGHT = 600;
-const PACMAN_SIZE = 40;
-const PACMAN_RADIUS = PACMAN_SIZE / 2;
+const FIELD_WIDTH = gameConfig.FIELD_WIDTH;
+const FIELD_HEIGHT = gameConfig.FIELD_HEIGHT;
+const PACMAN_RADIUS = gameConfig.PACMAN_RADIUS;
+const POINT_RADIUS = gameConfig.POINT_RADIUS;
+const POINTS_TOTAL = gameConfig.POINTS_TOTAL;
 const START_POSITIONS = [
   { x: 10,  y: 10, angle: 45 },
-  { x: FIELD_WIDTH - 50, y: 10, angle: 135 },
-  { x: 10,  y: FIELD_HEIGHT - 50, angle: -45 },
-  { x: FIELD_WIDTH - 50, y: FIELD_HEIGHT - 50, angle: -135 }
+  { x: FIELD_WIDTH - (PACMAN_RADIUS*2) - 10, y: 10, angle: 135 },
+  { x: 10,  y: FIELD_HEIGHT - (PACMAN_RADIUS*2) - 10, angle: -45 },
+  { x: FIELD_WIDTH - (PACMAN_RADIUS*2) - 10, y: FIELD_HEIGHT - (PACMAN_RADIUS*2) - 10, angle: -135 }
 ];
 
+
+
+
+let points = [];
 let players = {};
 let cornerOccupants = [null, null, null, null];
 
 function broadcastGameState() {
-  const state = Object.values(players);
+  const state = {
+    players: Object.values(players),
+    points: points
+  };
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'state', players: state }));
+      client.send(JSON.stringify({ type: 'state', ...state }));
     }
   });
 }
+
 
 function willCollide(id, x, y) {
   const RADIUS = PACMAN_RADIUS; 
@@ -37,6 +48,23 @@ function willCollide(id, x, y) {
     return false;
   });
 }
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generatePoints() {
+  points = [];
+  for (let i = 0; i < POINTS_TOTAL; ++i) {
+    points.push({
+      id: i + 1,
+      x: randomInt(PACMAN_RADIUS*2, FIELD_WIDTH - PACMAN_RADIUS*2),
+      y: randomInt(PACMAN_RADIUS*2, FIELD_HEIGHT - PACMAN_RADIUS*2)
+    });
+  }
+}
+
+
 
 wss.on('connection', (ws) => {
   let playerId = null;
@@ -73,8 +101,10 @@ wss.on('connection', (ws) => {
         y: START_POSITIONS[myCorner].y,
         angle: START_POSITIONS[myCorner].angle,
         color: data.color,
-        corner: myCorner
+        corner: myCorner,
+        score: 0
       };
+      ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
       broadcastGameState();
       return;
     }
@@ -96,8 +126,8 @@ wss.on('connection', (ws) => {
         newY = oldY + speed * dy / norm;
 
         // Field limits
-        newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_SIZE));
-        newY = Math.max(0, Math.min(newY, FIELD_HEIGHT - PACMAN_SIZE));
+        newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_RADIUS*2 ));
+        newY = Math.max(0, Math.min(newY, FIELD_HEIGHT - PACMAN_RADIUS*2 ));
 
         // Collision checking
         if (!willCollide(playerId, newX, newY)) {
@@ -114,6 +144,19 @@ wss.on('connection', (ws) => {
       }
       broadcastGameState();
     }
+
+    // Клиент сообщил о сборе точки
+    if (data.type === 'collect_point' && playerId && players[playerId]) {
+      // Найдём точку по id
+      const idx = points.findIndex(pt => pt.id === data.pointId);
+      if (idx !== -1) {
+        points.splice(idx, 1); // удаляем точку
+        players[playerId].score = (players[playerId].score || 0) + 1;
+        broadcastGameState();
+      }
+      return;
+    }
+
   });
 
   ws.on('close', () => {
@@ -125,7 +168,11 @@ wss.on('connection', (ws) => {
       delete players[playerId];
       broadcastGameState();
     }
+    if (Object.keys(players).length === 0) {
+      generatePoints(); // сбрасываем точки при отсутствии игроков
+    }
   });
 });
 
+generatePoints();
 console.log('WebSocket server launched on ws://localhost:3000');
