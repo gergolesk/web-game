@@ -145,12 +145,12 @@ wss.on('connection', (ws) => {
       broadcastGameState();
     }
 
-    // Клиент сообщил о сборе точки
+    // The client reported the collection point
     if (data.type === 'collect_point' && playerId && players[playerId]) {
-      // Найдём точку по id
+      // Find a point by id
       const idx = points.findIndex(pt => pt.id === data.pointId);
       if (idx !== -1) {
-        points.splice(idx, 1); // удаляем точку
+        points.splice(idx, 1); // remove point
         players[playerId].score = (players[playerId].score || 0) + 1;
         broadcastGameState();
       }
@@ -169,7 +169,7 @@ wss.on('connection', (ws) => {
       broadcastGameState();
     }
     if (Object.keys(players).length === 0) {
-      generatePoints(); // сбрасываем точки при отсутствии игроков
+      generatePoints(); // reset points
     }
   });
 });
