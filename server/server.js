@@ -13,14 +13,7 @@ const START_POSITIONS = [
 ];
 
 let players = {};
-
-function isCornerFree(cornerIndex) {
-  const {x, y} = START_POSITIONS[cornerIndex];
-  const radius = 40;
-  return !Object.values(players).some(p => {
-    return Math.abs(p.x - x) < radius && Math.abs(p.y - y) < radius;
-  });
-}
+let cornerOccupants = [null, null, null, null];
 
 function broadcastGameState() {
   const state = Object.values(players);
@@ -39,7 +32,6 @@ function willCollide(id, x, y) {
     const dy = p.y - y;
     const dist = Math.sqrt(dx*dx + dy*dy);
     if (dist < RADIUS * 2) {
-      console.log(`Collision: ${id} vs ${p.id}, dist=${dist}`);
       return true;
     }
     return false;
@@ -47,15 +39,15 @@ function willCollide(id, x, y) {
 }
 
 wss.on('connection', (ws) => {
-  console.log('New client is connected');
   let playerId = null;
   let myCorner = -1;
 
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
-    //console.log('Received:', data); 
+
+    // Is it possible to connect (is there a free slot)
     if (data.type === 'can_join') {
-      const freeCorner = START_POSITIONS.findIndex((_, i) => isCornerFree(i));
+      const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
       } else {
@@ -66,13 +58,14 @@ wss.on('connection', (ws) => {
 
     if (data.type === 'join') {
       playerId = data.id;
-      myCorner = START_POSITIONS.findIndex((_, i) => isCornerFree(i));
+      myCorner = cornerOccupants.findIndex(id => id === null);
 
       if (myCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
         return;
       }
 
+      cornerOccupants[myCorner] = playerId;
       players[playerId] = {
         id: playerId,
         name: data.name,
@@ -86,7 +79,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // Server moves itself (dx/dy)
     if (data.type === 'move' && playerId && players[playerId]) {
       const speed = 4;
       let dx = typeof data.dx === 'number' ? data.dx : 0;
@@ -126,6 +118,10 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (playerId && players[playerId]) {
+      // Freeing up the corner
+      if (typeof players[playerId].corner === 'number') {
+        cornerOccupants[players[playerId].corner] = null;
+      }
       delete players[playerId];
       broadcastGameState();
     }
