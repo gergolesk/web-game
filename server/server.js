@@ -39,7 +39,7 @@ function willCollide(id, x, y) {
     const dy = p.y - y;
     const dist = Math.sqrt(dx*dx + dy*dy);
     if (dist < RADIUS * 2) {
-      console.log(`Коллизия: ${id} vs ${p.id}, dist=${dist}`);
+      console.log(`Collision: ${id} vs ${p.id}, dist=${dist}`);
       return true;
     }
     return false;
@@ -53,7 +53,7 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
-    console.log('Received:', data); 
+    //console.log('Received:', data); 
     if (data.type === 'can_join') {
       const freeCorner = START_POSITIONS.findIndex((_, i) => isCornerFree(i));
       if (freeCorner === -1) {
