@@ -1,11 +1,13 @@
+// PACMAN client with virtual joystick, keyboard, and mouse drag support
+
 const POINT_RADIUS = 8;
 
 const playerId = Math.random().toString(36).substr(2, 9);
-const playerColor = '#'+Math.floor(Math.random()*16777215).toString(16);
+const playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
 let playerName = null;
 let points = [];
 
-//default params
+// Default game config
 let gameConfig = {
   FIELD_WIDTH: 800,
   FIELD_HEIGHT: 600,
@@ -15,17 +17,17 @@ let gameConfig = {
   PACMAN_SPEED: 4
 };
 
-
 const ws = new WebSocket('ws://localhost:3000');
 
 let pos = { x: 100, y: 100 };
 let lastAngle = 0;
 const keys = {};
+let virtualDir = { dx: 0, dy: 0 };
+
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
 const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
-const gameArea = document.getElementById('game-area');
 
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'can_join' }));
@@ -87,18 +89,12 @@ ws.onmessage = (event) => {
             <polygon points="20,20 40,10 40,30" fill="black"/>
           </mask>
         </defs>
-        <circle
-          cx="20" cy="20" r="20"
-          fill="${p.color || 'yellow'}"
-          mask="url(#m-${p.id})"
-        />
+        <circle cx="20" cy="20" r="20" fill="${p.color || 'yellow'}" mask="url(#m-${p.id})" />
       `;
       otherPlayersDiv.appendChild(el);
     });
 
     points = data.points || [];
-
-     // Draw point on the field
     const pointsDiv = document.getElementById('points');
     pointsDiv.innerHTML = '';
     points.forEach(pt => {
@@ -106,8 +102,8 @@ ws.onmessage = (event) => {
       point.style.position = 'absolute';
       point.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
       point.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
-      point.style.width = (gameConfig.POINT_RADIUS*2) + 'px';
-      point.style.height = (gameConfig.POINT_RADIUS*2) + 'px';
+      point.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
+      point.style.height = (gameConfig.POINT_RADIUS * 2) + 'px';
       point.style.borderRadius = '50%';
       point.style.background = 'orange';
       point.style.boxShadow = '0 0 8px #fa0';
@@ -115,43 +111,25 @@ ws.onmessage = (event) => {
       pointsDiv.appendChild(point);
     });
 
-    // List of players with score
     let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
     data.players.forEach(p => {
       let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
       playersListHtml += `<div class="${playerClass}">
-          <span class="player-dot" style="background:${p.color};"></span>
-          <span>${p.name ? p.name : 'Player'}</span>
-          <span style="margin-left:auto;font-weight:normal;">${p.score || 0}</span>
-        </div>`;
+        <span class="player-dot" style="background:${p.color};"></span>
+        <span>${p.name || 'Player'}</span>
+        <span style="margin-left:auto;font-weight:normal;">${p.score || 0}</span>
+      </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
-
   }
 };
 
-document.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
-});
-document.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
+addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-function getDirectionAngle() {
-  const up = keys['arrowup'] || keys['w'];
-  const down = keys['arrowdown'] || keys['s'];
-  const left = keys['arrowleft'] || keys['a'];
-  const right = keys['arrowright'] || keys['d'];
-
-  if (up && right) return -45;
-  if (up && left)  return -135;
-  if (down && right) return 45;
-  if (down && left) return 135;
-  if (up) return -90;
-  if (down) return 90;
-  if (right) return 0;
-  if (left) return 180;
-  return lastAngle;
+function getDirectionAngle(dx, dy) {
+  if (dx === 0 && dy === 0) return lastAngle;
+  return Math.atan2(dy, dx) * 180 / Math.PI;
 }
 
 function updatePlayer() {
@@ -160,40 +138,128 @@ function updatePlayer() {
   player.style.transform = `rotate(${lastAngle}deg)`;
 }
 
+let mouthOpen = true, mouthTimer = 0, lastX = pos.x, lastY = pos.y;
+function animateMouth() {
+  const mouth = document.getElementById('mouth');
+  if (!mouth) return;
+  const moved = (pos.x !== lastX || pos.y !== lastY);
+  lastX = pos.x; lastY = pos.y;
+  if (moved) {
+    mouthTimer++;
+    if (mouthTimer >= 5) {
+      mouthOpen = !mouthOpen;
+      mouthTimer = 0;
+      mouth.setAttribute("points", mouthOpen ? "20,20 40,10 40,30" : "20,20 40,18 40,22");
+    }
+  } else {
+    mouth.setAttribute("points", "20,20 40,18 40,22");
+  }
+}
+
 function gameLoop() {
-  let dx = 0, dy = 0;
+  let dx = virtualDir.dx || 0;
+  let dy = virtualDir.dy || 0;
+
   if (keys['arrowup'] || keys['w']) dy -= 1;
   if (keys['arrowdown'] || keys['s']) dy += 1;
   if (keys['arrowleft'] || keys['a']) dx -= 1;
   if (keys['arrowright'] || keys['d']) dx += 1;
 
   const norm = Math.sqrt(dx * dx + dy * dy);
+  if (norm < 0.1) { dx = 0; dy = 0; }
 
   if (ws.readyState === 1) {
-    //console.log('Send:', {dx, dy, norm});
     ws.send(JSON.stringify({
       type: 'move',
       id: playerId,
       dx: norm > 0 ? dx / norm : 0,
       dy: norm > 0 ? dy / norm : 0,
-      angle: getDirectionAngle()
+      angle: getDirectionAngle(dx, dy)
     }));
   }
 
-  // Check collision with dot
   points.forEach(pt => {
-    const dx = pt.x - (pos.x + gameConfig.PACMAN_RADIUS);
-    const dy = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dX = pt.x - (pos.x + gameConfig.PACMAN_RADIUS);
+    const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
+    const dist = Math.sqrt(dX * dX + dY * dY);
     if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
 
-
   updatePlayer();
+  animateMouth();
   requestAnimationFrame(gameLoop);
 }
 
 updatePlayer();
 gameLoop();
+
+const joystick = document.getElementById('joystick');
+const stick = document.getElementById('stick');
+let joystickCenter = { x: 0, y: 0 };
+let dragging = false;
+
+function updateJoystickDirection(touchX, touchY) {
+  const rect = joystick.getBoundingClientRect();
+  joystickCenter.x = rect.left + rect.width / 2;
+  joystickCenter.y = rect.top + rect.height / 2;
+
+  const dx = touchX - joystickCenter.x;
+  const dy = touchY - joystickCenter.y;
+
+  const maxDist = rect.width / 2;
+  const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
+  const angle = Math.atan2(dy, dx);
+
+  const offsetX = Math.cos(angle) * dist;
+  const offsetY = Math.sin(angle) * dist;
+
+  stick.style.left = `${offsetX + rect.width / 2 - stick.offsetWidth / 2}px`;
+  stick.style.top = `${offsetY + rect.height / 2 - stick.offsetHeight / 2}px`;
+
+  virtualDir.dx = dx / maxDist;
+  virtualDir.dy = dy / maxDist;
+}
+
+function resetJoystick() {
+  stick.style.left = '30px';
+  stick.style.top = '30px';
+  virtualDir.dx = 0;
+  virtualDir.dy = 0;
+}
+
+// Touch support
+joystick.addEventListener('touchstart', e => {
+  if (e.touches.length > 0) {
+    updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, { passive: false });
+
+joystick.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length > 0) {
+    updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, { passive: false });
+
+joystick.addEventListener('touchend', () => resetJoystick(), { passive: false });
+
+// Mouse support
+stick.addEventListener('mousedown', e => {
+  dragging = true;
+  updateJoystickDirection(e.clientX, e.clientY);
+});
+
+window.addEventListener('mousemove', e => {
+  if (dragging) {
+    updateJoystickDirection(e.clientX, e.clientY);
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (dragging) {
+    dragging = false;
+    resetJoystick();
+  }
+});
