@@ -36,7 +36,6 @@ ws.onmessage = (event) => {
 
   if (data.type === 'game_config') {
     gameConfig = data.config;
-    // (при желании: сразу подгони размеры игрового поля под FIELD_WIDTH/HEIGHT)
     return;
   }
 

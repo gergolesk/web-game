@@ -1,7 +1,7 @@
-import { gameConfig } from './config';
+import WebSocket, { WebSocketServer } from 'ws';
+import { gameConfig } from './config.js';
 
-const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 3000 });
+const wss = new WebSocketServer({ port: 3000 });
 
 const FIELD_WIDTH = gameConfig.FIELD_WIDTH;
 const FIELD_HEIGHT = gameConfig.FIELD_HEIGHT;
