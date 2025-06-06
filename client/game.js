@@ -16,7 +16,8 @@ let gameConfig = {
 };
 
 
-const ws = new WebSocket('ws://localhost:3000');
+//const ws = new WebSocket('ws://localhost:3000');
+const ws = new WebSocket('ws://' + window.location.hostname + ':3000');
 
 let pos = { x: 100, y: 100 };
 let lastAngle = 0;
