@@ -142,6 +142,8 @@ wss.on('connection', (ws) => {
         // Rotate only
         players[playerId].angle = angle;
       }
+      players[playerId].mouthOpen = !!data.mouthOpen;
+
       broadcastGameState();
     }
 
