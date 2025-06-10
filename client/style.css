@@ -58,6 +58,7 @@ body {
   width: 800px; height: 600px;
   pointer-events: none;
   z-index: 0;
+  perspective: 400px;
 }
 
 #joystick {
@@ -85,3 +86,42 @@ body {
   transition: 0.1s;
 }
 
+.coin {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  perspective: 600px;
+  transform-style: preserve-3d;
+}
+
+.coin-face {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, gold 0%, orange 70%, #b8860b 100%);
+  box-shadow: 0 0 10px gold;
+  animation: pulse 1.2s ease-in-out infinite, wiggle 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px gold;
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 20px gold;
+  }
+}
+
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(1deg);
+  }
+  75% {
+    transform: rotate(-1deg);
+  }
+}

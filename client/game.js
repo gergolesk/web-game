@@ -1,4 +1,4 @@
-// PACMAN client with virtual joystick, keyboard, and mouse drag support
+// PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, and sound
 
 const POINT_RADIUS = 8;
 
@@ -7,7 +7,6 @@ const playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
 let playerName = null;
 let points = [];
 
-// Default game config
 let gameConfig = {
   FIELD_WIDTH: 800,
   FIELD_HEIGHT: 600,
@@ -82,11 +81,12 @@ ws.onmessage = (event) => {
       el.style.top = p.y + 'px';
       el.style.transform = `rotate(${p.angle}deg)`;
       el.style.zIndex = 1;
+      const mouthPoints = p.mouthOpen ? "20,20 40,10 40,30" : "20,20 40,18 40,22";
       el.innerHTML = `
         <defs>
           <mask id="m-${p.id}">
             <circle cx="20" cy="20" r="20" fill="white"/>
-            <polygon points="20,20 40,10 40,30" fill="black"/>
+            <polygon points="${mouthPoints}" fill="black"/>
           </mask>
         </defs>
         <circle cx="20" cy="20" r="20" fill="${p.color || 'yellow'}" mask="url(#m-${p.id})" />
@@ -96,19 +96,39 @@ ws.onmessage = (event) => {
 
     points = data.points || [];
     const pointsDiv = document.getElementById('points');
-    pointsDiv.innerHTML = '';
+
+// Собираем ID текущих монет с сервера
+    const newIds = new Set(points.map(p => 'point-' + p.id));
+
+// Удаляем только те DOM-элементы, которых нет больше в списке
+    [...pointsDiv.children].forEach(child => {
+      if (!newIds.has(child.id) && !child.classList.contains('sparkle')) {
+        child.remove();
+      }
+    });
+
+// Создаём новые монеты, не трогаем существующие
     points.forEach(pt => {
-      const point = document.createElement('div');
-      point.style.position = 'absolute';
-      point.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
-      point.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
-      point.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
-      point.style.height = (gameConfig.POINT_RADIUS * 2) + 'px';
-      point.style.borderRadius = '50%';
-      point.style.background = 'orange';
-      point.style.boxShadow = '0 0 8px #fa0';
-      point.style.zIndex = 0;
-      pointsDiv.appendChild(point);
+      let pointWrapper = document.getElementById('point-' + pt.id);
+      if (!pointWrapper) {
+        pointWrapper = document.createElement('div');
+        pointWrapper.id = 'point-' + pt.id;
+        pointWrapper.classList.add('coin');
+        pointWrapper.style.position = 'absolute';
+        pointWrapper.style.zIndex = '0';
+
+        const coinFace = document.createElement('div');
+        coinFace.classList.add('coin-face');
+        pointWrapper.appendChild(coinFace);
+
+        pointsDiv.appendChild(pointWrapper);
+      }
+
+      // Обновляем позицию и размеры (не затрагиваем .innerHTML или .children)
+      pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
+      pointWrapper.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
+      pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
+      pointWrapper.style.height = (gameConfig.POINT_RADIUS * 2) + 'px';
     });
 
     let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
@@ -174,7 +194,8 @@ function gameLoop() {
       id: playerId,
       dx: norm > 0 ? dx / norm : 0,
       dy: norm > 0 ? dy / norm : 0,
-      angle: getDirectionAngle(dx, dy)
+      angle: getDirectionAngle(dx, dy),
+      mouthOpen: mouthOpen
     }));
   }
 
@@ -183,6 +204,8 @@ function gameLoop() {
     const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
     const dist = Math.sqrt(dX * dX + dY * dY);
     if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
+      triggerCoinCollectEffect(pt.x, pt.y);
+      playCoinSound();
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
@@ -229,7 +252,39 @@ function resetJoystick() {
   virtualDir.dy = 0;
 }
 
-// Touch support
+function playCoinSound() {
+  const snd = document.getElementById('coinSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function triggerCoinCollectEffect(x, y) {
+  const sparkle = document.createElement('div');
+  sparkle.style.position = 'absolute';
+  sparkle.style.left = (x - 10) + 'px';
+  sparkle.style.top = (y - 10) + 'px';
+  sparkle.style.width = '20px';
+  sparkle.style.height = '20px';
+  sparkle.style.borderRadius = '50%';
+  sparkle.style.background = 'gold';
+  sparkle.style.opacity = '0.9';
+  sparkle.style.boxShadow = '0 0 20px gold';
+  sparkle.style.zIndex = 10;
+  sparkle.style.transition = 'all 0.3s ease-out';
+
+  const pointsDiv = document.getElementById('points');
+  pointsDiv.appendChild(sparkle);
+
+  setTimeout(() => {
+    sparkle.style.transform = 'scale(2)';
+    sparkle.style.opacity = '0';
+  }, 10);
+
+  setTimeout(() => sparkle.remove(), 300);
+}
+
 joystick.addEventListener('touchstart', e => {
   if (e.touches.length > 0) {
     updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
@@ -245,7 +300,6 @@ joystick.addEventListener('touchmove', e => {
 
 joystick.addEventListener('touchend', () => resetJoystick(), { passive: false });
 
-// Mouse support
 stick.addEventListener('mousedown', e => {
   dragging = true;
   updateJoystickDirection(e.clientX, e.clientY);
