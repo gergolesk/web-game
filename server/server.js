@@ -59,9 +59,14 @@ function generatePoints() {
     points.push({
       id: i + 1,
       x: randomInt(PACMAN_RADIUS*2, FIELD_WIDTH - PACMAN_RADIUS*2),
-      y: randomInt(PACMAN_RADIUS*2, FIELD_HEIGHT - PACMAN_RADIUS*2)
+      y: randomInt(PACMAN_RADIUS*2, FIELD_HEIGHT - PACMAN_RADIUS*2),
+      isNegative: false
     });
   }
+
+  // We choose 2 random coins that will be "negative"
+  const shuffled = [...points].sort(() => Math.random() - 0.5);
+  shuffled.slice(0, 2).forEach(pt => pt.isNegative = true);
 }
 
 
@@ -102,7 +107,8 @@ wss.on('connection', (ws) => {
         angle: START_POSITIONS[myCorner].angle,
         color: data.color,
         corner: myCorner,
-        score: 0
+        score: 0,
+        slowUntil: 0
       };
       ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
       broadcastGameState();
@@ -110,7 +116,10 @@ wss.on('connection', (ws) => {
     }
 
     if (data.type === 'move' && playerId && players[playerId]) {
-      const speed = 4;
+      let speed = 4;
+      if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) {
+        speed = speed / 2;
+      }
       let dx = typeof data.dx === 'number' ? data.dx : 0;
       let dy = typeof data.dy === 'number' ? data.dy : 0;
       let norm = Math.sqrt(dx * dx + dy * dy);
@@ -152,7 +161,13 @@ wss.on('connection', (ws) => {
       // Find a point by id
       const idx = points.findIndex(pt => pt.id === data.pointId);
       if (idx !== -1) {
+        const point = points[idx];
+
         points.splice(idx, 1); // remove point
+
+        if (point.isNegative) {
+          players[playerId].slowUntil = Date.now() + 2000; // замедление на 2 сек
+        }
         players[playerId].score = (players[playerId].score || 0) + 1;
         broadcastGameState();
       }

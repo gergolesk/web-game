@@ -121,6 +121,10 @@ ws.onmessage = (event) => {
         coinFace.classList.add('coin-face');
         pointWrapper.appendChild(coinFace);
 
+        if (pt.isNegative) {
+          pointWrapper.classList.add('negative-coin');
+        }
+
         pointsDiv.appendChild(pointWrapper);
       }
 
@@ -204,8 +208,15 @@ function gameLoop() {
     const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
     const dist = Math.sqrt(dX * dX + dY * dY);
     if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
-      triggerCoinCollectEffect(pt.x, pt.y);
-      playCoinSound();
+      const isNegative = pt.isNegative;
+      if (isNegative) {
+        applySlowDebuff(2000);
+        playBadCoinSound();
+      } else {
+        triggerCoinCollectEffect(pt.x, pt.y);
+        playCoinSound();
+      }
+
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
@@ -222,6 +233,25 @@ const joystick = document.getElementById('joystick');
 const stick = document.getElementById('stick');
 let joystickCenter = { x: 0, y: 0 };
 let dragging = false;
+
+let isSlowed = false;
+
+function applySlowDebuff(duration) {
+  if (isSlowed) return;
+
+  isSlowed = true;
+  const originalSpeed = gameConfig.PACMAN_SPEED;
+  gameConfig.PACMAN_SPEED = originalSpeed / 2;
+
+  const playerEl = document.getElementById('player-circle');
+  if (playerEl) playerEl.style.filter = 'grayscale(100%)';
+
+  setTimeout(() => {
+    gameConfig.PACMAN_SPEED = originalSpeed;
+    isSlowed = false;
+    if (playerEl) playerEl.style.filter = '';
+  }, duration);
+}
 
 function updateJoystickDirection(touchX, touchY) {
   const rect = joystick.getBoundingClientRect();
@@ -254,6 +284,14 @@ function resetJoystick() {
 
 function playCoinSound() {
   const snd = document.getElementById('coinSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playBadCoinSound() {
+  const snd = document.getElementById('badCoinSound');
   if (snd) {
     snd.currentTime = 0;
     snd.play().catch(() => {});
