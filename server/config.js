@@ -6,3 +6,5 @@ export const gameConfig = {
   POINTS_TOTAL: 30,
   PACMAN_SPEED: 4
 };
+
+export const PLAYER_COLORS = ['#FFD700', '#00BFFF', '#32CD32', '#FF4500']; // gold, blue, green, orange-red

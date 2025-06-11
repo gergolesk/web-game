@@ -1,5 +1,5 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { gameConfig } from './config.js';
+import { gameConfig, PLAYER_COLORS } from './config.js';
 
 const wss = new WebSocketServer({ port: 3000 });
 
@@ -105,7 +105,7 @@ wss.on('connection', (ws) => {
         x: START_POSITIONS[myCorner].x,
         y: START_POSITIONS[myCorner].y,
         angle: START_POSITIONS[myCorner].angle,
-        color: data.color,
+        color: PLAYER_COLORS[myCorner], // теперь цвет назначается по номеру угла
         corner: myCorner,
         score: 0,
         slowUntil: 0
