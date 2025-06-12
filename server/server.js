@@ -25,8 +25,16 @@ let cornerOccupants = [null, null, null, null];
 function broadcastGameState() {
   const state = {
     players: Object.values(players),
-    points: points
+    points: points,
+    gameDuration: gameConfig.duration,
+    gameStartedAt: gameConfig.startTime
   };
+
+  if (gameConfig.gameStarted && gameConfig.startTime && gameConfig.duration) {
+    state.gameDuration = gameConfig.duration;
+    state.gameStartedAt = gameConfig.startTime;
+  }
+
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: 'state', ...state }));
@@ -52,6 +60,11 @@ function willCollide(id, x, y) {
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+
+gameConfig.duration = null;     // секунд
+gameConfig.startTime = null;    // timestamp (Date.now())
+gameConfig.gameStarted = false;
 
 function generatePoints() {
   points = [];
@@ -108,8 +121,16 @@ wss.on('connection', (ws) => {
         color: PLAYER_COLORS[myCorner], // теперь цвет назначается по номеру угла
         corner: myCorner,
         score: 0,
-        slowUntil: 0
+        slowUntil: 0,
+        readyToRestart: false
       };
+
+      if (!gameConfig.gameStarted && typeof data.duration === 'number') {
+        gameConfig.duration = data.duration;
+        gameConfig.startTime = Date.now();
+        gameConfig.gameStarted = true;
+      }
+
       ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
       broadcastGameState();
       return;
@@ -174,6 +195,38 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // Игрок готов к новой игре (нажал "Play Again")
+    if (data.type === 'ready_to_restart' && playerId && players[playerId]) {
+      players[playerId].readyToRestart = true;
+
+      const allReady = Object.values(players).every(p => p.readyToRestart);
+
+      if (allReady) {
+        // Сброс
+        generatePoints();
+        gameConfig.duration = null;
+        gameConfig.startTime = null;
+        gameConfig.gameStarted = false;
+        cornerOccupants = [null, null, null, null];
+
+        for (const p of Object.values(players)) {
+          p.score = 0;
+          p.slowUntil = 0;
+          p.readyToRestart = false;
+        }
+
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'ready_to_choose_duration' }));
+          }
+        });
+
+        broadcastGameState();
+      }
+
+      return;
+    }
+
   });
 
   ws.on('close', () => {
@@ -187,6 +240,10 @@ wss.on('connection', (ws) => {
     }
     if (Object.keys(players).length === 0) {
       generatePoints(); // reset points
+
+      gameConfig.duration = null;
+      gameConfig.startTime = null;
+      gameConfig.gameStarted = false;
     }
   });
 });
