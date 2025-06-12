@@ -6,6 +6,9 @@ const playerId = Math.random().toString(36).substr(2, 9);
 const playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
 let playerName = null;
 let points = [];
+let timerInterval = null;
+let currentTimerStart = null;
+let lastReceivedPlayers = [];
 
 let gameConfig = {
   FIELD_WIDTH: 800,
@@ -47,18 +50,12 @@ ws.onmessage = (event) => {
   }
 
   if (data.type === 'can_join_ok') {
-    playerName = prompt('Enter your name:');
-    if (!playerName) {
-      ws.close();
-      return;
-    }
-    ws.send(JSON.stringify({
-      type: 'join',
-      id: playerId,
-      name: playerName,
-      color: playerColor
-    }));
-    return;
+    document.getElementById('startModal').style.display = 'flex';
+  }
+
+  if (data.type === 'ready_to_choose_duration') {
+    document.getElementById('startModal').style.display = 'flex';
+    document.getElementById('playerNameInput').value = playerName || '';
   }
 
   if (data.type === 'state') {
@@ -68,6 +65,10 @@ ws.onmessage = (event) => {
       pos.y = me.y;
       lastAngle = me.angle || 0;
       if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
+    }
+
+    if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
+      startCountdownTimer(data.gameDuration, data.gameStartedAt);
     }
 
     otherPlayersDiv.innerHTML = '';
@@ -97,7 +98,7 @@ ws.onmessage = (event) => {
     points = data.points || [];
     const pointsDiv = document.getElementById('points');
 
-// Собираем ID текущих монет с сервера
+    // Собираем ID текущих монет с сервера
     const newIds = new Set(points.map(p => 'point-' + p.id));
 
 // Удаляем только те DOM-элементы, которых нет больше в списке
@@ -146,6 +147,8 @@ ws.onmessage = (event) => {
     });
     playersListDiv.innerHTML = playersListHtml;
   }
+
+  lastReceivedPlayers = data.players;
 };
 
 addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
@@ -237,18 +240,10 @@ let dragging = false;
 let isSlowed = false;
 
 function applySlowDebuff(duration) {
-  if (isSlowed) return;
-
-  isSlowed = true;
-  const originalSpeed = gameConfig.PACMAN_SPEED;
-  gameConfig.PACMAN_SPEED = originalSpeed / 2;
-
   const playerEl = document.getElementById('player-circle');
   if (playerEl) playerEl.style.filter = 'grayscale(100%)';
 
   setTimeout(() => {
-    gameConfig.PACMAN_SPEED = originalSpeed;
-    isSlowed = false;
     if (playerEl) playerEl.style.filter = '';
   }, duration);
 }
@@ -355,3 +350,79 @@ window.addEventListener('mouseup', () => {
     resetJoystick();
   }
 });
+
+document.getElementById('startGameBtn').addEventListener('click', () => {
+  const nameInput = document.getElementById('playerNameInput');
+  const durationInput = document.getElementById('gameDurationInput');
+
+  const name = nameInput.value.trim();
+  const duration = parseInt(durationInput.value);
+
+  if (!name) {
+    alert('Please enter a name!');
+    return;
+  }
+
+  playerName = name;
+
+  document.getElementById('startModal').style.display = 'none';
+
+  ws.send(JSON.stringify({
+    type: 'join',
+    id: playerId,
+    name: playerName,
+    color: playerColor,
+    duration: duration
+  }));
+
+});
+
+
+function startCountdownTimer(duration, startedAt) {
+  const el = document.getElementById('game-timer');
+  if (!el) return;
+
+  // предотвратить повторный запуск
+  if (currentTimerStart === startedAt) return;
+  currentTimerStart = startedAt;
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  el.style.display = 'block';
+
+  timerInterval = setInterval(() => {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startedAt) / 1000);
+    const remaining = Math.max(0, duration - elapsed);
+
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    el.textContent = `Time: ${minutes}:${seconds}`;
+
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      el.textContent = 'Game Ended';
+
+      showGameResults(lastReceivedPlayers || []);
+    }
+  }, 1000);
+}
+
+function showGameResults(players) {
+  const modal = document.getElementById('resultModal');
+  const list = document.getElementById('resultList');
+  modal.classList.remove('hidden');
+
+  const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  list.innerHTML = sorted.map((p, i) => {
+    const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
+    return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
+  }).join('');
+}
+
+function sendReadyToRestart() {
+  const modal = document.getElementById('resultModal');
+  if (modal) modal.classList.add('hidden');
+  ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+}
