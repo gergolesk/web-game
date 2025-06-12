@@ -43,6 +43,10 @@ ws.onmessage = (event) => {
     return;
   }
 
+  if (data.type === 'waiting_for_players') {
+    alert('Waiting for at least 2 players to start the game.');
+  }
+
   if (data.type === 'max_players') {
     document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">There are already 4 players in the game.<br>Please try later</div>';
     ws.close();

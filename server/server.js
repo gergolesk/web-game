@@ -126,9 +126,15 @@ wss.on('connection', (ws) => {
       };
 
       if (!gameConfig.gameStarted && typeof data.duration === 'number') {
-        gameConfig.duration = data.duration;
-        gameConfig.startTime = Date.now();
-        gameConfig.gameStarted = true;
+        const connectedPlayers = Object.values(players);
+        if (connectedPlayers.length >= 2) {
+          gameConfig.duration = data.duration;
+          gameConfig.startTime = Date.now();
+          gameConfig.gameStarted = true;
+          generatePoints();
+        } else {
+          ws.send(JSON.stringify({ type: 'waiting_for_players' }));
+        }
       }
 
       ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
