@@ -25,11 +25,58 @@ let pos = { x: 100, y: 100 };
 let lastAngle = 0;
 const keys = {};
 let virtualDir = { dx: 0, dy: 0 };
+let myRole = null;
 
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
 const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
+
+function updateStartBar(role) {
+  const btn = document.getElementById('startGameBtnBar');
+  if (!btn) return;
+  if (role === 'admin') {
+    btn.textContent = 'Create';
+  } else {
+    btn.textContent = 'Join';
+  }
+  btn.style.display = 'inline-block';
+  btn.disabled = false;
+  document.getElementById('startGameBar').style.display = 'flex';
+}
+
+function hideStartBar() {
+  document.getElementById('startGameBar').style.display = 'none';
+}
+
+function updateStartGameBarButton(players) {
+  const btn = document.getElementById('startGameBtnBar');
+  if (!btn) return;
+
+  // Тест: увидишь ли ты это в консоли после обновления state
+  console.log('[updateStartGameBarButton] players:', players);
+
+  const realPlayers = players.filter(p => p.role === 'player' || p.role === 'admin');
+  const playerCount = realPlayers.length;
+  console.log('[updateStartGameBarButton] playerId:', playerId, 'realPlayers:', realPlayers, 'playerCount:', playerCount);
+
+  if (playerCount === 1 && realPlayers[0].id === playerId && realPlayers[0].role === 'admin') {
+    btn.textContent = 'Create';
+    btn.disabled = false;
+  } else if (playerCount >= 4) {
+    btn.textContent = 'Join';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Join';
+    btn.disabled = false;
+  }
+}
+
+
+
+document.getElementById('startGameBar').style.display = 'flex';
+
+
 
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'can_join' }));
@@ -40,6 +87,15 @@ ws.onmessage = (event) => {
 
   if (data.type === 'game_config') {
     gameConfig = data.config;
+    if (data.role) {
+      myRole = data.role;
+    }
+    // (при первом подключении: если зритель — показать сообщение)
+    if (myRole === 'spectator') {
+      document.body.innerHTML = '<div style="color:gray; background:#222; font-size:2em; text-align:center; margin-top:30vh;">The game already has 4 players.<br>You are a spectator.</div>';
+      ws.close();
+      return;
+    }
     return;
   }
 
@@ -54,15 +110,24 @@ ws.onmessage = (event) => {
   }
 
   if (data.type === 'can_join_ok') {
-    document.getElementById('startModal').style.display = 'flex';
+    // если playerCount === 0, значит ты будешь первым и создашь игру
+    const btn = document.getElementById('startGameBtnBar');
+    if (!btn) return;
+    if (data.playerCount === 0) {
+      btn.textContent = 'Create';
+      btn.disabled = false;
+    } else if (data.playerCount >= 4) {
+      btn.textContent = 'Join';
+      btn.disabled = true;
+    } else {
+      btn.textContent = 'Join';
+      btn.disabled = false;
+    }
   }
 
-  if (data.type === 'ready_to_choose_duration') {
-    document.getElementById('startModal').style.display = 'flex';
-    document.getElementById('playerNameInput').value = playerName || '';
-  }
 
   if (data.type === 'state') {
+    //updateStartGameBarButton(data.players.length);
     const me = data.players.find(p => p.id === playerId);
     if (me) {
       pos.x = me.x;
@@ -102,17 +167,13 @@ ws.onmessage = (event) => {
     points = data.points || [];
     const pointsDiv = document.getElementById('points');
 
-    // Собираем ID текущих монет с сервера
     const newIds = new Set(points.map(p => 'point-' + p.id));
-
-// Удаляем только те DOM-элементы, которых нет больше в списке
     [...pointsDiv.children].forEach(child => {
       if (!newIds.has(child.id) && !child.classList.contains('sparkle')) {
         child.remove();
       }
     });
 
-// Создаём новые монеты, не трогаем существующие
     points.forEach(pt => {
       let pointWrapper = document.getElementById('point-' + pt.id);
       if (!pointWrapper) {
@@ -133,7 +194,6 @@ ws.onmessage = (event) => {
         pointsDiv.appendChild(pointWrapper);
       }
 
-      // Обновляем позицию и размеры (не затрагиваем .innerHTML или .children)
       pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
@@ -150,6 +210,7 @@ ws.onmessage = (event) => {
       </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
+    updateStartGameBarButton(data.players);
   }
 
   lastReceivedPlayers = data.players;
@@ -223,7 +284,6 @@ function gameLoop() {
         triggerCoinCollectEffect(pt.x, pt.y);
         playCoinSound();
       }
-
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
@@ -355,10 +415,13 @@ window.addEventListener('mouseup', () => {
   }
 });
 
+// --- Централизованный старт по модалке и центральной кнопке ---
+document.getElementById('startGameBtnBar').addEventListener('click', () => {
+  document.getElementById('startModal').classList.remove('hidden');
+});
 document.getElementById('startGameBtn').addEventListener('click', () => {
   const nameInput = document.getElementById('playerNameInput');
   const durationInput = document.getElementById('gameDurationInput');
-
   const name = nameInput.value.trim();
   const duration = parseInt(durationInput.value);
 
@@ -368,25 +431,23 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
   }
 
   playerName = name;
-
-  document.getElementById('startModal').style.display = 'none';
+  document.getElementById('startModal').classList.add('hidden');
+  hideStartBar(); // скрыть центральную кнопку!
 
   ws.send(JSON.stringify({
     type: 'join',
     id: playerId,
     name: playerName,
     color: playerColor,
-    duration: duration
+    duration: duration,
+    role: myRole
   }));
-
 });
-
 
 function startCountdownTimer(duration, startedAt) {
   const el = document.getElementById('game-timer');
   if (!el) return;
 
-  // предотвратить повторный запуск
   if (currentTimerStart === startedAt) return;
   currentTimerStart = startedAt;
 
@@ -430,3 +491,6 @@ function sendReadyToRestart() {
   if (modal) modal.classList.add('hidden');
   ws.send(JSON.stringify({ type: 'ready_to_restart' }));
 }
+
+// Кнопки preStartButtons и пр. не нужны! Используй только центральную кнопку!
+

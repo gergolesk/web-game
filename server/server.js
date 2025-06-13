@@ -82,6 +82,11 @@ function generatePoints() {
   shuffled.slice(0, 2).forEach(pt => pt.isNegative = true);
 }
 
+function activePlayerCount() {
+  return Object.values(players).filter(p => p.role !== 'spectator').length;
+}
+
+
 
 
 wss.on('connection', (ws) => {
@@ -97,36 +102,52 @@ wss.on('connection', (ws) => {
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
       } else {
-        ws.send(JSON.stringify({ type: 'can_join_ok' }));
+        // Вот тут отправляем число игроков!
+        ws.send(JSON.stringify({
+          type: 'can_join_ok',
+          playerCount: Object.values(players).filter(p => p.role !== 'spectator').length
+        }));
       }
       return;
     }
+
 
     if (data.type === 'join') {
       playerId = data.id;
       myCorner = cornerOccupants.findIndex(id => id === null);
 
+      // если мест нет — зритель
+      let role = "player";
       if (myCorner === -1) {
-        ws.send(JSON.stringify({ type: 'max_players' }));
-        return;
+        role = "spectator";
+      } else {
+        // если это первый — админ
+        if (Object.keys(players).length === 0) {
+          role = "admin";
+        }
       }
 
-      cornerOccupants[myCorner] = playerId;
+      if (role !== "spectator") {
+        cornerOccupants[myCorner] = playerId;
+      }
+
       players[playerId] = {
         id: playerId,
         name: data.name,
-        x: START_POSITIONS[myCorner].x,
-        y: START_POSITIONS[myCorner].y,
-        angle: START_POSITIONS[myCorner].angle,
-        color: PLAYER_COLORS[myCorner], // теперь цвет назначается по номеру угла
+        x: role === "spectator" ? 0 : START_POSITIONS[myCorner].x,
+        y: role === "spectator" ? 0 : START_POSITIONS[myCorner].y,
+        angle: role === "spectator" ? 0 : START_POSITIONS[myCorner].angle,
+        color: role === "spectator" ? "#888" : PLAYER_COLORS[myCorner],
         corner: myCorner,
         score: 0,
         slowUntil: 0,
-        readyToRestart: false
+        readyToRestart: false,
+        role: role
       };
 
-      if (!gameConfig.gameStarted && typeof data.duration === 'number') {
-        const connectedPlayers = Object.values(players);
+      // Только не для зрителей:
+      if (role !== "spectator" && !gameConfig.gameStarted && typeof data.duration === 'number') {
+        const connectedPlayers = Object.values(players).filter(p => p.role !== 'spectator');
         if (connectedPlayers.length >= 2) {
           gameConfig.duration = data.duration;
           gameConfig.startTime = Date.now();
@@ -137,7 +158,8 @@ wss.on('connection', (ws) => {
         }
       }
 
-      ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
+      ws.send(JSON.stringify({ type: 'game_config', config: gameConfig, role }));
+
       broadcastGameState();
       return;
     }

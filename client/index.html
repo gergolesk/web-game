@@ -6,7 +6,12 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="startGameBar" class="start-bar" style="display:flex">
+    <button id="startGameBtnBar">Create the game</button>
+  </div>
+
   <div id="game-area">
+    
     <svg id="player" width="40" height="40" style="position:absolute; z-index:2;">
     <defs>
         <mask id="pacman-mask">
@@ -30,11 +35,13 @@
       </div>
   </div>
   <div id="players-list"></div>
+  
+
 
   <audio id="coinSound" src="sounds/coin.mp3" preload="auto"></audio>
   <audio id="badCoinSound" src="sounds/negativeEffect.mp3" preload="auto"></audio>
 
-  <div id="startModal" class="modal-overlay">
+  <div id="startModal" class="modal-overlay hidden">
       <div class="modal-content">
           <h2>Start Game</h2>
           <label>
