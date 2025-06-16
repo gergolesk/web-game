@@ -90,20 +90,35 @@ wss.on('connection', (ws) => {
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
       } else {
-        ws.send(JSON.stringify({ type: 'can_join_ok' }));
+        ws.send(JSON.stringify({
+          type: 'can_join_ok',
+          duration: gameConfig.duration
+        }));
       }
       return;
     }
 
     if (data.type === 'join') {
       playerId = data.id;
-      myCorner = cornerOccupants.findIndex(id => id === null);
 
-      if (myCorner === -1) {
+      // ✅ Проверяем до добавления игрока
+      const freeCorner = cornerOccupants.findIndex(id => id === null);
+      if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
         return;
       }
 
+      const isFirstPlayer = cornerOccupants.every(id => id === null); // Все null — значит первый
+
+      // ✅ Только первый игрок может установить duration
+      if (isFirstPlayer && gameConfig.duration === null && typeof data.duration === 'number') {
+        gameConfig.duration = data.duration;
+        gameConfig.startTime = null;
+        gameConfig.gameStarted = false;
+      }
+
+      // Теперь добавляем игрока
+      myCorner = freeCorner;
       cornerOccupants[myCorner] = playerId;
       players[playerId] = {
         id: playerId,
@@ -120,37 +135,19 @@ wss.on('connection', (ws) => {
 
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
 
-      // Если игра еще не начата и это первый игрок
-      if (!gameConfig.gameStarted && connectedPlayersCount === 1) {
-        // Первый игрок устанавливает время
-        if (typeof data.duration === 'number') {
-          gameConfig.duration = data.duration;
-          gameConfig.startTime = null; // пока не установлено
-          gameConfig.gameStarted = false; // пока не начато
-        }
-        ws.send(JSON.stringify({
-          type: 'waiting_for_players',
-          isFirstPlayer: true,
-          duration: gameConfig.duration
-        }));
-      }
-      // Если игра еще не начата, но это не первый игрок
-      else if (!gameConfig.gameStarted && connectedPlayersCount > 1) {
-        // Отправляем текущие настройки
-        ws.send(JSON.stringify({
-          type: 'waiting_for_players',
-          isFirstPlayer: false,
-          duration: gameConfig.duration
-        }));
-      }
+      // Отправляем модалку ожидания
+      ws.send(JSON.stringify({
+        type: 'waiting_for_players',
+        isFirstPlayer: isFirstPlayer,
+        duration: gameConfig.duration
+      }));
 
-      // Если уже достаточно игроков для старта (например, 2)
+      // Если уже достаточно игроков — запускаем игру
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
         gameConfig.startTime = Date.now();
         gameConfig.gameStarted = true;
         generatePoints();
 
-        // Уведомляем всех игроков о начале игры
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
@@ -165,6 +162,7 @@ wss.on('connection', (ws) => {
       broadcastGameState();
       return;
     }
+
 
     if (data.type === 'move' && playerId && players[playerId]) {
       let speed = 4;
