@@ -9,6 +9,7 @@ let points = [];
 let timerInterval = null;
 let currentTimerStart = null;
 let lastReceivedPlayers = [];
+let hasJoined = false;
 
 let gameConfig = {
   FIELD_WIDTH: 800,
@@ -38,13 +39,43 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
 
+  if (data.type === 'offer_start_game') {
+    const popup = document.getElementById('startGamePopup');
+    const info = document.getElementById('connectedPlayersInfo');
+    const btn = document.getElementById('startGameBtnByHost');
+
+    // Обновим текст (сколько игроков подключилось)
+    info.textContent = `There are ${data.count} players online. Start now or wait for more?`;
+
+    popup.classList.remove('hidden');
+
+    btn.onclick = () => {
+      popup.classList.add('hidden');
+      ws.send(JSON.stringify({ type: 'start_game_by_host' }));
+    };
+  }
+
   if (data.type === 'game_config') {
     gameConfig = data.config;
     return;
   }
 
   if (data.type === 'waiting_for_players') {
-    alert('Waiting for at least 2 players to start the game.');
+    if (hasJoined) return;
+
+    const isFirst = data.isFirstPlayer;
+    const durationSet = typeof data.duration === 'number';
+
+    document.getElementById('startModal').style.display = 'flex';
+    document.getElementById('playerNameInput').value = playerName || '';
+
+    const durationInput = document.getElementById('gameDurationInput');
+    durationInput.value = data.duration || 60; // всегда подставляем текущую, даже если не first
+    durationInput.disabled = !isFirst || durationSet;
+    durationInput.parentElement.style.opacity = (!isFirst || durationSet) ? '0.5' : '1';
+
+    // 👇 если хочешь полностью скрыть поле:
+    durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
   }
 
   if (data.type === 'max_players') {
@@ -55,11 +86,25 @@ ws.onmessage = (event) => {
 
   if (data.type === 'can_join_ok') {
     document.getElementById('startModal').style.display = 'flex';
+    document.getElementById('playerNameInput').value = playerName || '';
+
+    const durationInput = document.getElementById('gameDurationInput');
+    durationInput.value = data.duration || 60;
+    const durationSet = typeof data.duration === 'number';
+
+    durationInput.disabled = durationSet;
+    durationInput.parentElement.style.opacity = durationSet ? '0.5' : '1';
+    durationInput.parentElement.style.display = durationSet ? 'none' : 'block'; // 🔒 скрыть у всех кроме первого
   }
 
   if (data.type === 'ready_to_choose_duration') {
     document.getElementById('startModal').style.display = 'flex';
     document.getElementById('playerNameInput').value = playerName || '';
+
+    const durationInput = document.getElementById('gameDurationInput');
+    durationInput.disabled = false;
+    durationInput.parentElement.style.opacity = '1';
+    durationInput.parentElement.style.display = 'block';
   }
 
   if (data.type === 'state') {
@@ -378,7 +423,7 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
     color: playerColor,
     duration: duration
   }));
-
+  hasJoined = true;
 });
 
 
