@@ -213,6 +213,15 @@ wss.on('connection', (ws) => {
 
         if (point.isNegative) {
           players[playerId].slowUntil = Date.now() + 2000;
+
+          // ✨ Генерация новой негативной монеты
+          const newNegative =  {
+            id: Date.now(),
+            x: randomInt(PACMAN_RADIUS * 2 , FIELD_WIDTH - PACMAN_RADIUS * 2),
+            y: randomInt(PACMAN_RADIUS * 2 , FIELD_HEIGHT - PACMAN_RADIUS * 2),
+            isNegative: true
+          };
+          points.push(newNegative);
         } else {
           players[playerId].score = (players[playerId].score || 0) + 1;
         }
