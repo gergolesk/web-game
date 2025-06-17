@@ -66,15 +66,17 @@ function generatePoints() {
   for (let i = 0; i < POINTS_TOTAL; ++i) {
     points.push({
       id: i + 1,
-      x: randomInt(PACMAN_RADIUS*2, FIELD_WIDTH - PACMAN_RADIUS*2),
-      y: randomInt(PACMAN_RADIUS*2, FIELD_HEIGHT - PACMAN_RADIUS*2),
-      isNegative: false
+      x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+      y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+      type: "normal"
     });
   }
 
   // We choose 2 random coins that will be "negative"
   const shuffled = [...points].sort(() => Math.random() - 0.5);
-  shuffled.slice(0, 2).forEach(pt => pt.isNegative = true);
+  shuffled.slice(0, 1).forEach(pt => pt.type = "negative"); // замедление
+  shuffled.slice(1, 2).forEach(pt => pt.type = "bonus");    // +5 очков
+  shuffled.slice(2, 3).forEach(pt => pt.type = "trap");     // -3 очка
 }
 
 wss.on('connection', (ws) => {
@@ -211,34 +213,47 @@ wss.on('connection', (ws) => {
 
         points.splice(idx, 1);
 
-        if (point.isNegative) {
-          players[playerId].slowUntil = Date.now() + 2000;
+        switch (point.type) {
+          case "negative":
+            players[playerId].slowUntil = Date.now() + 2000;
+            // сразу создаём новую негативную
+            points.push({
+              id: Date.now(),
+              x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+              y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+              type: "negative"
+            });
+            break;
 
-          // ✨ Генерация новой негативной монеты
-          const newNegative =  {
-            id: Date.now(),
-            x: randomInt(PACMAN_RADIUS * 2 , FIELD_WIDTH - PACMAN_RADIUS * 2),
-            y: randomInt(PACMAN_RADIUS * 2 , FIELD_HEIGHT - PACMAN_RADIUS * 2),
-            isNegative: true
-          };
-          points.push(newNegative);
-        } else {
-          players[playerId].score = (players[playerId].score || 0) + 1;
+          case "bonus":
+            players[playerId].score = (players[playerId].score || 0) + 5;
+            break;
 
-          // ✨ Проверяем, осталось ли мало обычных монет
-          const remainingNormals = points.filter(p => !p.isNegative).length;
-          if(remainingNormals < 10) {
-            const countToAdd = 3;
-            for(let i = 0; i <countToAdd; i++) {
-              points.push({
-                id: Date.now() + i,
-                x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
-                y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
-                isNegative: false
-              })
+          case "trap":
+            players[playerId].score = Math.max(0, (players[playerId].score || 0) - 3);
+            break;
+
+          default: // "normal"
+            players[playerId].score = (players[playerId].score || 0) + 1;
+
+            const remainingNormals = points.filter(p => p.type === "normal").length;
+            if (remainingNormals < 10) {
+              for (let i = 0; i < 3; i++) {
+                points.push({
+                  id: Date.now() + i,
+                  x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+                  y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+                  type: "normal"
+                });
+              }
             }
-          }
         }
+
+        ws.send(JSON.stringify({
+          type: 'point_collected',
+          pointId: point.id,
+          pointType: point.type
+        }));
 
         broadcastGameState();
       }

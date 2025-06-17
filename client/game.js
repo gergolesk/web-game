@@ -176,11 +176,14 @@ ws.onmessage = (event) => {
         pointsDiv.appendChild(pointWrapper);
       }
 
-      // 🧼 Обновляем класс "negative-coin" (даже если уже есть)
-      if (pt.isNegative) {
+      pointWrapper.classList.remove('negative-coin', 'bonus-coin', 'trap-coin'); // очистка
+
+      if (pt.type === "negative") {
         pointWrapper.classList.add('negative-coin');
-      } else {
-        pointWrapper.classList.remove('negative-coin');
+      } else if (pt.type === "bonus") {
+        pointWrapper.classList.add('bonus-coin');
+      } else if (pt.type === "trap") {
+        pointWrapper.classList.add('trap-coin');
       }
 
       // Обновляем позицию и размеры
@@ -200,6 +203,19 @@ ws.onmessage = (event) => {
       </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
+  }
+
+  if (data.type === 'point_collected') {
+    if (data.pointType === 'negative') {
+      applySlowDebuff(2000);
+      playBadCoinSound();
+    } else if (data.pointType === 'bonus') {
+      playBonusSound();
+    } else if (data.pointType === 'trap') {
+      playTrapSound();
+    } else {
+      playCoinSound(); // обычная монета
+    }
   }
 
   lastReceivedPlayers = data.players;
@@ -265,14 +281,9 @@ function gameLoop() {
     const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
     const dist = Math.sqrt(dX * dX + dY * dY);
     if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
-      const isNegative = pt.isNegative;
-      if (isNegative) {
-        applySlowDebuff(2000);
-        playBadCoinSound();
-      } else {
-        triggerCoinCollectEffect(pt.x, pt.y);
-        playCoinSound();
-      }
+
+      triggerCoinCollectEffect(pt.x, pt.y);
+      ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
 
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
@@ -341,6 +352,22 @@ function playCoinSound() {
 
 function playBadCoinSound() {
   const snd = document.getElementById('badCoinSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playBonusSound() {
+  const snd = document.getElementById('bonusSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playTrapSound() {
+  const snd = document.getElementById('trapSound');
   if (snd) {
     snd.currentTime = 0;
     snd.play().catch(() => {});
