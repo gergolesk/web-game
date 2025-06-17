@@ -212,18 +212,38 @@ ws.onmessage = (event) => {
       </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
-
+    
     if (data.gamePaused) {
       showPauseOverlay(data.pausedBy, data.pausedBy === playerName);
     } else {
       hidePauseOverlay();
     }
-
+    /*
     // обновляем таймер (учитываем паузу)
     if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
       startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
     }
+    */
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
 
+    if (data.gamePaused) {
+      // Если пауза, просто показать "замороженное" время один раз
+      const el = document.getElementById('game-timer');
+      if (el) {
+        const now = Date.now();
+        const elapsed = Math.floor((now - data.gameStartedAt - (data.pauseAccum || 0)) / 1000);
+        const remaining = Math.max(0, data.gameDuration - elapsed);
+        const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+        const seconds = String(remaining % 60).padStart(2, '0');
+        el.textContent = `Time: ${minutes}:${seconds}`;
+      }
+    } else {
+      // Только если ИГРА НЕ на паузе — запускай setInterval!
+      if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
+        startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+      }
+    }
   }
 
   lastReceivedPlayers = data.players;
