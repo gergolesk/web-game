@@ -224,6 +224,20 @@ wss.on('connection', (ws) => {
           points.push(newNegative);
         } else {
           players[playerId].score = (players[playerId].score || 0) + 1;
+
+          // ✨ Проверяем, осталось ли мало обычных монет
+          const remainingNormals = points.filter(p => !p.isNegative).length;
+          if(remainingNormals < 10) {
+            const countToAdd = 3;
+            for(let i = 0; i <countToAdd; i++) {
+              points.push({
+                id: Date.now() + i,
+                x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+                y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+                isNegative: false
+              })
+            }
+          }
         }
 
         broadcastGameState();
