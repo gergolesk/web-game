@@ -155,29 +155,13 @@ wss.on('connection', (ws) => {
         duration: gameConfig.duration
       }));
 
-      // Если уже достаточно игроков — запускаем игру
-      // if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
-      //   gameConfig.startTime = Date.now();
-      //   gameConfig.gameStarted = true;
-      //   generatePoints();
-      //
-      //   wss.clients.forEach(client => {
-      //     if (client.readyState === WebSocket.OPEN) {
-      //       client.send(JSON.stringify({
-      //         type: 'game_started',
-      //         duration: gameConfig.duration,
-      //         startTime: gameConfig.startTime
-      //       }));
-      //     }
-      //   });
-      // }
-
       broadcastGameState();
       return;
     }
 
 
     if (data.type === 'move' && playerId && players[playerId]) {
+      if (!gameConfig.gameStarted) return;
       let speed = 4;
       if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) {
         speed = speed / 2;
@@ -225,12 +209,37 @@ wss.on('connection', (ws) => {
       if (idx !== -1) {
         const point = points[idx];
 
-        points.splice(idx, 1); // remove point
+        points.splice(idx, 1);
 
         if (point.isNegative) {
-          players[playerId].slowUntil = Date.now() + 2000; // замедление на 2 сек
+          players[playerId].slowUntil = Date.now() + 2000;
+
+          // ✨ Генерация новой негативной монеты
+          const newNegative =  {
+            id: Date.now(),
+            x: randomInt(PACMAN_RADIUS * 2 , FIELD_WIDTH - PACMAN_RADIUS * 2),
+            y: randomInt(PACMAN_RADIUS * 2 , FIELD_HEIGHT - PACMAN_RADIUS * 2),
+            isNegative: true
+          };
+          points.push(newNegative);
+        } else {
+          players[playerId].score = (players[playerId].score || 0) + 1;
+
+          // ✨ Проверяем, осталось ли мало обычных монет
+          const remainingNormals = points.filter(p => !p.isNegative).length;
+          if(remainingNormals < 10) {
+            const countToAdd = 3;
+            for(let i = 0; i <countToAdd; i++) {
+              points.push({
+                id: Date.now() + i,
+                x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+                y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+                isNegative: false
+              })
+            }
+          }
         }
-        players[playerId].score = (players[playerId].score || 0) + 1;
+
         broadcastGameState();
       }
       return;
