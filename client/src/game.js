@@ -1,16 +1,17 @@
-//import { POINT_RADIUS, gameConfig } from './config.js';//
 import { gameConfig } from './config.js';
+import { initControllers, getCurrentDirection } from './controllers.js';
 import { initWebSocket, ws } from './ws.js';
 import { updatePlayerState, animateMouth, pos, lastAngle, mouthOpen } from './player.js';
 import { handlePoints } from './points.js';
-import { triggerCoinCollectEffect, updatePlayersList, updatePlayerDom } from './ui.js';
+import { triggerCoinCollectEffect, updatePlayersList, updatePlayerDom, showStartModal, startCountdownTimer, showGameResults, hideGameResults } from './ui.js';
 import { getDirectionAngle } from './utils.js';
-import { initControllers, getCurrentDirection } from './controllers.js';
 
-let playerId = Math.random().toString(36).substr(2, 9);
-let playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+const playerId = Math.random().toString(36).substr(2, 9);
+const playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
 let playerName = null;
 let points = [];
+let lastReceivedPlayers = [];
+let hasJoined = false;
 
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
@@ -19,17 +20,22 @@ const myCircle = document.getElementById('player-circle');
 const joystick = document.getElementById('joystick');
 const stick = document.getElementById('stick');
 
-// Управление
 initControllers(joystick, stick);
 
-initWebSocket(playerId, playerColor, (name) => { playerName = name; }, onState);
+function setPlayerName(name) { playerName = name; }
+function storeLastPlayers(players) { lastReceivedPlayers = players; }
 
 function onState(data) {
-  // Твой код рендера состояния (отрисовка других игроков и монет)
   const me = data.players.find(p => p.id === playerId);
   if (me) {
     updatePlayerState(me);
     if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
+  }
+
+  if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
+    startCountdownTimer(data.gameDuration, data.gameStartedAt, () => {
+      showGameResults(lastReceivedPlayers || []);
+    });
   }
 
   otherPlayersDiv.innerHTML = '';
@@ -56,17 +62,14 @@ function onState(data) {
     otherPlayersDiv.appendChild(el);
   });
 
-  // Работа с монетками
   points = data.points || [];
   const pointsDiv = document.getElementById('points');
   const newIds = new Set(points.map(p => 'point-' + p.id));
-
   [...pointsDiv.children].forEach(child => {
     if (!newIds.has(child.id) && !child.classList.contains('sparkle')) {
       child.remove();
     }
   });
-
   points.forEach(pt => {
     let pointWrapper = document.getElementById('point-' + pt.id);
     if (!pointWrapper) {
@@ -83,7 +86,6 @@ function onState(data) {
       if (pt.isNegative) {
         pointWrapper.classList.add('negative-coin');
       }
-
       pointsDiv.appendChild(pointWrapper);
     }
     pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
@@ -91,14 +93,22 @@ function onState(data) {
     pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
     pointWrapper.style.height = (gameConfig.POINT_RADIUS * 2) + 'px';
   });
-
   updatePlayersList(data.players, playerId);
 }
 
-// Главный игровой цикл
+initWebSocket({
+  playerId,
+  playerColor,
+  setPlayerName,
+  onState,
+  showStartModal,
+  startCountdownTimer,
+  showGameResults,
+  storeLastPlayers
+});
+
 function gameLoop() {
   const { dx, dy } = getCurrentDirection();
-
   const norm = Math.sqrt(dx * dx + dy * dy);
   let ndx = norm > 0 ? dx / norm : 0;
   let ndy = norm > 0 ? dy / norm : 0;
@@ -123,3 +133,32 @@ function gameLoop() {
 
 updatePlayerDom(player, pos, lastAngle);
 gameLoop();
+
+// Кнопка старта
+document.getElementById('startGameBtn').addEventListener('click', () => {
+  const nameInput = document.getElementById('playerNameInput');
+  const durationInput = document.getElementById('gameDurationInput');
+  const name = nameInput.value.trim();
+  const duration = parseInt(durationInput.value);
+  if (!name) {
+    alert('Please enter a name!');
+    return;
+  }
+  playerName = name;
+  document.getElementById('startModal').style.display = 'none';
+
+  ws.send(JSON.stringify({
+    type: 'join',
+    id: playerId,
+    name: playerName,
+    color: playerColor,
+    duration: duration
+  }));
+  hasJoined = true;
+});
+
+// Кнопка "играть снова"
+document.getElementById('playAgainBtn').addEventListener('click', () => {
+  hideGameResults();
+  ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+});
