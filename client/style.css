@@ -39,10 +39,8 @@ body {
 }
 
 #joystick {
-  position: absolute;
-  bottom: -150px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* никаких абсолютов! */
+  margin: 0 auto 0 auto;
   width: 120px;
   height: 120px;
   background: rgba(255, 255, 255, 0.05);
@@ -50,6 +48,10 @@ body {
   border-radius: 50%;
   touch-action: none;
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 #stick {
@@ -57,21 +59,25 @@ body {
   height: 60px;
   background: #fff;
   border-radius: 50%;
-  position: absolute;
-  left: 30px;
-  top: 30px;
+  position: relative;
+  left: 0;
+  top: 0;
   transition: 0.1s;
+  box-shadow: 0 0 8px #aaa;
 }
 
 /* Правая панель */
 #sidebar {
   display: flex;
   flex-direction: column;
+  justify-content: space-between; /* вот магия! */
   align-items: stretch;
   min-width: 210px;
   margin-left: 30px;
   margin-top: 20px;
+  height: 600px; /* совпадает с высотой игрового поля */
   z-index: 100;
+  box-sizing: border-box;
 }
 
 /* Таймер */
