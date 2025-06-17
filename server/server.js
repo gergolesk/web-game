@@ -209,12 +209,14 @@ wss.on('connection', (ws) => {
       if (idx !== -1) {
         const point = points[idx];
 
-        points.splice(idx, 1); // remove point
+        points.splice(idx, 1);
 
         if (point.isNegative) {
-          players[playerId].slowUntil = Date.now() + 2000; // замедление на 2 сек
+          players[playerId].slowUntil = Date.now() + 2000;
+        } else {
+          players[playerId].score = (players[playerId].score || 0) + 1;
         }
-        players[playerId].score = (players[playerId].score || 0) + 1;
+
         broadcastGameState();
       }
       return;
