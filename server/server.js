@@ -155,29 +155,13 @@ wss.on('connection', (ws) => {
         duration: gameConfig.duration
       }));
 
-      // Если уже достаточно игроков — запускаем игру
-      // if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
-      //   gameConfig.startTime = Date.now();
-      //   gameConfig.gameStarted = true;
-      //   generatePoints();
-      //
-      //   wss.clients.forEach(client => {
-      //     if (client.readyState === WebSocket.OPEN) {
-      //       client.send(JSON.stringify({
-      //         type: 'game_started',
-      //         duration: gameConfig.duration,
-      //         startTime: gameConfig.startTime
-      //       }));
-      //     }
-      //   });
-      // }
-
       broadcastGameState();
       return;
     }
 
 
     if (data.type === 'move' && playerId && players[playerId]) {
+      if (!gameConfig.gameStarted) return;
       let speed = 4;
       if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) {
         speed = speed / 2;
