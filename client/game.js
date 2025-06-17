@@ -107,6 +107,14 @@ ws.onmessage = (event) => {
     durationInput.parentElement.style.display = 'block';
   }
 
+  if (data.type === 'game_paused') {
+    showPauseOverlay(data.pausedBy);
+  }
+
+  if (data.type === 'game_unpaused') {
+    hidePauseOverlay();
+  }
+
   if (data.type === 'state') {
     const me = data.players.find(p => p.id === playerId);
     if (me) {
@@ -115,11 +123,15 @@ ws.onmessage = (event) => {
       lastAngle = me.angle || 0;
       if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
     }
-
+    /*
+    // Сначала остановить текущий таймер
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    // Затем запустить с новыми данными
     if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
-      startCountdownTimer(data.gameDuration, data.gameStartedAt);
+      startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
     }
-
+*/
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
       if (p.id === playerId) return;
@@ -200,6 +212,18 @@ ws.onmessage = (event) => {
       </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
+
+    if (data.gamePaused) {
+      showPauseOverlay(data.pausedBy, data.pausedBy === playerName);
+    } else {
+      hidePauseOverlay();
+    }
+
+    // обновляем таймер (учитываем паузу)
+    if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
+      startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+    }
+
   }
 
   lastReceivedPlayers = data.players;
@@ -431,8 +455,8 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
   hasJoined = true;
 });
 
-
-function startCountdownTimer(duration, startedAt) {
+/*
+function startCountdownTimer(duration, startedAt, pauseAccum) {
   const el = document.getElementById('game-timer');
   if (!el) return;
 
@@ -446,7 +470,7 @@ function startCountdownTimer(duration, startedAt) {
 
   timerInterval = setInterval(() => {
     const now = Date.now();
-    const elapsed = Math.floor((now - startedAt) / 1000);
+    const elapsed = Math.floor((now - startedAt - (pauseAccum || 0)) / 1000);
     const remaining = Math.max(0, duration - elapsed);
 
     const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
@@ -461,6 +485,37 @@ function startCountdownTimer(duration, startedAt) {
     }
   }, 1000);
 }
+*/
+
+function startCountdownTimer(duration, startedAt, pauseAccum) {
+  const el = document.getElementById('game-timer');
+  if (!el) return;
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  el.style.display = 'block';
+
+  function update() {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startedAt - (pauseAccum || 0)) / 1000);
+    const remaining = Math.max(0, duration - elapsed);
+
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    el.textContent = `Time: ${minutes}:${seconds}`;
+
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      el.textContent = 'Game Ended';
+      showGameResults(lastReceivedPlayers || []);
+    }
+  }
+
+  update(); // показываем сразу
+  timerInterval = setInterval(update, 1000);
+}
+
 
 function showGameResults(players) {
   const modal = document.getElementById('resultModal');
@@ -479,4 +534,36 @@ function sendReadyToRestart() {
   const modal = document.getElementById('resultModal');
   if (modal) modal.classList.add('hidden');
   ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+}
+
+//Pause buttons
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  ws.send(JSON.stringify({ type: 'pause_game' }));
+});
+
+// По клавише "Pause"
+window.addEventListener('keydown', e => {
+  if (e.key === 'Pause' || e.code === 'Pause') {
+    ws.send(JSON.stringify({ type: 'pause_game' }));
+  }
+});
+
+// Resume button
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  ws.send(JSON.stringify({ type: 'unpause_game' }));
+});
+
+function showPauseOverlay(pausedBy, canResume) {
+  document.getElementById('pauseOverlay').classList.remove('hidden');
+  document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
+  const btn = document.getElementById('resumeBtn');
+  // Только инициатор видит кнопку "Продолжить"
+  if (canResume) {
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+function hidePauseOverlay() {
+  document.getElementById('pauseOverlay').classList.add('hidden');
 }

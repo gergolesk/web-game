@@ -30,6 +30,7 @@
       </div>
   </div>
   <div id="players-list"></div>
+  <button id="pauseBtn">⏸ Pause</button>
 
   <audio id="coinSound" src="sounds/coin.mp3" preload="auto"></audio>
   <audio id="badCoinSound" src="sounds/negativeEffect.mp3" preload="auto"></audio>
@@ -69,6 +70,14 @@
           <button id="startGameBtnByHost">Start Game</button>
           <p class="note">Or wait for more players to join...</p>
       </div>
+  </div>
+
+  <div id="pauseOverlay" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h2>Game Paused</h2>
+      <p id="pauseByText"></p>
+      <button id="resumeBtn" style="display:none;">▶ Continue</button>
+    </div>
   </div>
 
   <script src="game.js"></script>

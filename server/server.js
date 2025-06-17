@@ -19,12 +19,25 @@ let points = [];
 let players = {};
 let cornerOccupants = [null, null, null, null];
 
+let gamePaused = false;
+let pausedBy = null;
+let pauseAccum = 0;
+let pauseStartedAt = null;
+
 function broadcastGameState() {
+  let totalPause = pauseAccum;
+  if (gamePaused && pauseStartedAt) {
+    totalPause += Date.now() - pauseStartedAt;
+  }
+
   const state = {
     players: Object.values(players),
     points: points,
     gameDuration: gameConfig.duration,
-    gameStartedAt: gameConfig.startTime
+    gameStartedAt: gameConfig.startTime,
+    gamePaused: gamePaused,
+    pausedBy: pausedBy,
+    pauseAccum: totalPause
   };
 
   if (gameConfig.gameStarted && gameConfig.startTime && gameConfig.duration) {
@@ -161,7 +174,7 @@ wss.on('connection', (ws) => {
 
 
     if (data.type === 'move' && playerId && players[playerId]) {
-      if (!gameConfig.gameStarted) return;
+      if (!gameConfig.gameStarted || gamePaused) return;
       let speed = 4;
       if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) {
         speed = speed / 2;
@@ -247,6 +260,10 @@ wss.on('connection', (ws) => {
 
     // Игрок готов к новой игре (нажал "Play Again")
     if (data.type === 'ready_to_restart' && playerId && players[playerId]) {
+      pauseAccum = 0;
+      pauseStartedAt = null;
+      gamePaused = false;
+      pausedBy = null;
       players[playerId].readyToRestart = true;
 
       const allReady = Object.values(players).every(p => p.readyToRestart);
@@ -287,6 +304,10 @@ wss.on('connection', (ws) => {
     }
 
     if (data.type === 'start_game_by_host' && playerId && players[playerId]) {
+      pauseAccum = 0;
+      pauseStartedAt = null;
+      gamePaused = false;
+      pausedBy = null;
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
         gameConfig.startTime = Date.now();
@@ -307,6 +328,52 @@ wss.on('connection', (ws) => {
       }
       return;
     }
+
+    if (data.type === 'pause_game' && playerId && players[playerId]) {
+      // Можно добавить проверку, что игра стартовала и не уже на паузе
+      if (!gamePaused && gameConfig.gameStarted) {
+        gamePaused = true;
+        pausedBy = players[playerId].name || playerId;
+        pauseStartedAt = Date.now();
+
+        // Сообщаем всем игрокам
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'game_paused',
+              pausedBy: pausedBy
+            }));
+          }
+        });
+
+        broadcastGameState(); // чтобы отразить паузу на клиентах
+      }
+      return;
+    }
+
+    if (data.type === 'unpause_game' && playerId && players[playerId]) {
+      // Снять с паузы может только тот же игрок
+      if (gamePaused && pausedBy === (players[playerId].name || playerId)) {
+        gamePaused = false;
+        if (pauseStartedAt) {
+          pauseAccum += Date.now() - pauseStartedAt;
+          pauseStartedAt = null;
+        }
+        pausedBy = null;
+
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'game_unpaused'
+            }));
+          }
+        });
+
+        broadcastGameState();
+      }
+      return;
+    }
+
   });
 
   ws.on('close', () => {
