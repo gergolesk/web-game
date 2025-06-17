@@ -157,10 +157,12 @@ ws.onmessage = (event) => {
       }
     });
 
-// Создаём новые монеты, не трогаем существующие
+
     points.forEach(pt => {
       let pointWrapper = document.getElementById('point-' + pt.id);
-      if (!pointWrapper) {
+      const isNew = !pointWrapper;
+
+      if (isNew) {
         pointWrapper = document.createElement('div');
         pointWrapper.id = 'point-' + pt.id;
         pointWrapper.classList.add('coin');
@@ -171,14 +173,17 @@ ws.onmessage = (event) => {
         coinFace.classList.add('coin-face');
         pointWrapper.appendChild(coinFace);
 
-        if (pt.isNegative) {
-          pointWrapper.classList.add('negative-coin');
-        }
-
         pointsDiv.appendChild(pointWrapper);
       }
 
-      // Обновляем позицию и размеры (не затрагиваем .innerHTML или .children)
+      // 🧼 Обновляем класс "negative-coin" (даже если уже есть)
+      if (pt.isNegative) {
+        pointWrapper.classList.add('negative-coin');
+      } else {
+        pointWrapper.classList.remove('negative-coin');
+      }
+
+      // Обновляем позицию и размеры
       pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
