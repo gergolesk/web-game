@@ -9,7 +9,7 @@ export let gameConfig = {
   PACMAN_SPEED: 4
 };
 
-// Позволяет обновлять gameConfig из других модулей (например, ws.js)
+// Allows you to update gameConfig from other modules (eg ws.js)
 export function setGameConfig(newConfig) {
   Object.assign(gameConfig, newConfig);
 }

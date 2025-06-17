@@ -26,14 +26,12 @@ export function triggerCoinCollectEffect(x, y) {
   setTimeout(() => sparkle.remove(), 300);
 }
 
-// Обновление DOM игрока
 export function updatePlayerDom(player, pos, angle) {
   player.style.left = pos.x + 'px';
   player.style.top = pos.y + 'px';
   player.style.transform = `rotate(${angle}deg)`;
 }
 
-// Обновление списка игроков
 export function updatePlayersList(players, playerId) {
   const playersListDiv = document.getElementById('players-list');
   let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
@@ -46,4 +44,78 @@ export function updatePlayersList(players, playerId) {
     </div>`;
   });
   playersListDiv.innerHTML = playersListHtml;
+}
+
+// --- Timer ---
+let timerInterval = null;
+let currentTimerStart = null;
+
+export function startCountdownTimer(duration, startedAt, onTimeEnd) {
+  const el = document.getElementById('game-timer');
+  if (!el) return;
+
+  if (currentTimerStart === startedAt) return;
+  currentTimerStart = startedAt;
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  el.style.display = 'block';
+
+  timerInterval = setInterval(() => {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startedAt) / 1000);
+    const remaining = Math.max(0, duration - elapsed);
+
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    el.textContent = `Time: ${minutes}:${seconds}`;
+
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      el.textContent = 'Game Ended';
+      if (typeof onTimeEnd === 'function') onTimeEnd();
+    }
+  }, 1000);
+}
+
+export function showGameResults(players) {
+  const modal = document.getElementById('resultModal');
+  const list = document.getElementById('resultList');
+  if (!modal || !list) return;
+
+  modal.classList.remove('hidden');
+
+  const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+  list.innerHTML = sorted.map((p, i) => {
+    const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
+    return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
+  }).join('');
+}
+
+export function hideGameResults() {
+  const modal = document.getElementById('resultModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+
+export function showStartModal(data) {
+  const modal = document.getElementById('startModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  const nameInput = document.getElementById('playerNameInput');
+  if (nameInput && data && data.name) nameInput.value = data.name;
+
+  const durationInput = document.getElementById('gameDurationInput');
+  if (durationInput && durationInput.parentElement) {
+    // Поле видно ТОЛЬКО если ты первый игрок и duration еще не выбран
+    if (data && data.isFirstPlayer && !data.duration) {
+      durationInput.parentElement.style.display = 'block';
+      durationInput.disabled = false;
+      durationInput.parentElement.style.opacity = '1';
+    } else {
+      durationInput.parentElement.style.display = 'none';
+    }
+    if (typeof data.duration === 'number') durationInput.value = data.duration;
+  }
 }

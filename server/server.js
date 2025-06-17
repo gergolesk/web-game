@@ -15,9 +15,6 @@ const START_POSITIONS = [
   { x: FIELD_WIDTH - (PACMAN_RADIUS*2) - 10, y: FIELD_HEIGHT - (PACMAN_RADIUS*2) - 10, angle: -135 }
 ];
 
-
-
-
 let points = [];
 let players = {};
 let cornerOccupants = [null, null, null, null];
@@ -25,8 +22,16 @@ let cornerOccupants = [null, null, null, null];
 function broadcastGameState() {
   const state = {
     players: Object.values(players),
-    points: points
+    points: points,
+    gameDuration: gameConfig.duration,
+    gameStartedAt: gameConfig.startTime
   };
+
+  if (gameConfig.gameStarted && gameConfig.startTime && gameConfig.duration) {
+    state.gameDuration = gameConfig.duration;
+    state.gameStartedAt = gameConfig.startTime;
+  }
+
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: 'state', ...state }));
@@ -34,9 +39,8 @@ function broadcastGameState() {
   });
 }
 
-
 function willCollide(id, x, y) {
-  const RADIUS = PACMAN_RADIUS; 
+  const RADIUS = PACMAN_RADIUS;
   return Object.values(players).some(p => {
     if (p.id === id) return false;
     const dx = p.x - x;
@@ -52,6 +56,10 @@ function willCollide(id, x, y) {
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+gameConfig.duration = null;     // секунд
+gameConfig.startTime = null;    // timestamp (Date.now())
+gameConfig.gameStarted = false;
 
 function generatePoints() {
   points = [];
@@ -69,8 +77,6 @@ function generatePoints() {
   shuffled.slice(0, 2).forEach(pt => pt.isNegative = true);
 }
 
-
-
 wss.on('connection', (ws) => {
   let playerId = null;
   let myCorner = -1;
@@ -84,20 +90,36 @@ wss.on('connection', (ws) => {
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
       } else {
-        ws.send(JSON.stringify({ type: 'can_join_ok' }));
+        ws.send(JSON.stringify({
+          type: 'can_join_ok',
+          duration: gameConfig.duration
+        }));
       }
       return;
     }
 
     if (data.type === 'join') {
       playerId = data.id;
-      myCorner = cornerOccupants.findIndex(id => id === null);
+      ws.playerId = playerId;
 
-      if (myCorner === -1) {
+      // ✅ Проверяем до добавления игрока
+      const freeCorner = cornerOccupants.findIndex(id => id === null);
+      if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
         return;
       }
 
+      const isFirstPlayer = cornerOccupants.every(id => id === null); // Все null — значит первый
+
+      // ✅ Только первый игрок может установить duration
+      if (isFirstPlayer && gameConfig.duration === null && typeof data.duration === 'number') {
+        gameConfig.duration = data.duration;
+        gameConfig.startTime = null;
+        gameConfig.gameStarted = false;
+      }
+
+      // Теперь добавляем игрока
+      myCorner = freeCorner;
       cornerOccupants[myCorner] = playerId;
       players[playerId] = {
         id: playerId,
@@ -105,15 +127,55 @@ wss.on('connection', (ws) => {
         x: START_POSITIONS[myCorner].x,
         y: START_POSITIONS[myCorner].y,
         angle: START_POSITIONS[myCorner].angle,
-        color: PLAYER_COLORS[myCorner], // теперь цвет назначается по номеру угла
+        color: PLAYER_COLORS[myCorner],
         corner: myCorner,
         score: 0,
-        slowUntil: 0
+        slowUntil: 0,
+        readyToRestart: false
       };
-      ws.send(JSON.stringify({ type: 'game_config', config: gameConfig }));
+
+      const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
+
+      if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
+        const firstPlayerId = cornerOccupants.find(id => id !== null);
+        const firstPlayerSocket = [...wss.clients].find(client => client.playerId === firstPlayerId);
+
+        if (firstPlayerSocket && firstPlayerSocket.readyState === WebSocket.OPEN) {
+          firstPlayerSocket.send(JSON.stringify({
+            type: 'offer_start_game',
+            count: connectedPlayersCount
+          }));
+        }
+      }
+
+      // Отправляем модалку ожидания
+      ws.send(JSON.stringify({
+        type: 'waiting_for_players',
+        isFirstPlayer: isFirstPlayer,
+        duration: gameConfig.duration
+      }));
+
+      // Если уже достаточно игроков — запускаем игру
+      // if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
+      //   gameConfig.startTime = Date.now();
+      //   gameConfig.gameStarted = true;
+      //   generatePoints();
+      //
+      //   wss.clients.forEach(client => {
+      //     if (client.readyState === WebSocket.OPEN) {
+      //       client.send(JSON.stringify({
+      //         type: 'game_started',
+      //         duration: gameConfig.duration,
+      //         startTime: gameConfig.startTime
+      //       }));
+      //     }
+      //   });
+      // }
+
       broadcastGameState();
       return;
     }
+
 
     if (data.type === 'move' && playerId && players[playerId]) {
       let speed = 4;
@@ -174,6 +236,68 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // Игрок готов к новой игре (нажал "Play Again")
+    if (data.type === 'ready_to_restart' && playerId && players[playerId]) {
+      players[playerId].readyToRestart = true;
+
+      const allReady = Object.values(players).every(p => p.readyToRestart);
+
+      if (allReady) {
+        // Сброс игрового состояния
+        generatePoints();
+        gameConfig.duration = null;
+        gameConfig.startTime = null;
+        gameConfig.gameStarted = false;
+
+        // ✅ Сброс занятого угла
+        cornerOccupants = [null, null, null, null];
+
+        // Сброс позиций игроков
+        Object.values(players).forEach((p, index) => {
+          const corner = cornerOccupants.findIndex(id => id === p.id);
+          if (corner !== -1) {
+            p.x = START_POSITIONS[corner].x;
+            p.y = START_POSITIONS[corner].y;
+            p.angle = START_POSITIONS[corner].angle;
+            p.score = 0;
+            p.slowUntil = 0;
+            p.readyToRestart = false;
+          }
+        });
+
+        // Уведомляем всех о возможности выбора нового времени
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'ready_to_choose_duration' }));
+          }
+        });
+
+        broadcastGameState();
+      }
+      return;
+    }
+
+    if (data.type === 'start_game_by_host' && playerId && players[playerId]) {
+      const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
+      if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
+        gameConfig.startTime = Date.now();
+        gameConfig.gameStarted = true;
+        generatePoints();
+
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'game_started',
+              duration: gameConfig.duration,
+              startTime: gameConfig.startTime
+            }));
+          }
+        });
+
+        broadcastGameState();
+      }
+      return;
+    }
   });
 
   ws.on('close', () => {
@@ -187,6 +311,10 @@ wss.on('connection', (ws) => {
     }
     if (Object.keys(players).length === 0) {
       generatePoints(); // reset points
+
+      gameConfig.duration = null;
+      gameConfig.startTime = null;
+      gameConfig.gameStarted = false;
     }
   });
 });
