@@ -31,6 +31,7 @@
       <div id="game-timer" class="game-timer">Time: 00:00</div>
       <div id="players-list"></div>
       <button id="pauseBtn">⏸ Pause</button>
+      
     </div>
     <div id="joystick">
       <div id="stick"></div>
@@ -59,6 +60,7 @@
           <option value="90">90</option>
         </select>
       </label>
+      <button id="howToPlayBtn">ℹ️ How to play</button>
       <button id="startGameBtn">Start</button>
     </div>
   </div>
@@ -87,6 +89,39 @@
       <h2>Game Paused</h2>
       <p id="pauseByText"></p>
       <button id="resumeBtn" style="display:none;">▶ Continue</button>
+    </div>
+  </div>
+
+  <!-- How to play Modal -->
+  <div id="howToPlayModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 420px;">
+      <h2>How to play</h2>
+      <div style="margin-bottom: 18px; font-size: 1.13em; color: #444;">
+        <b>PACMAN Arena</b> is a fast-paced multiplayer competition! Enter your name, invite your friends, and let's go!
+      </div>
+      <ul style="text-align: left; margin: 16px 0 24px 0; font-size: 1.07em;">
+        <li><b>Getting started:</b> Just type your name and get ready. You need at least <b>2 players</b> to start, up to <b>4 players</b> total.</li>
+        <li>
+          <b>Who’s the boss?</b> The first player to join becomes the <b>host</b>. The host chooses the game duration and starts the match when everyone’s ready.
+        </li>
+        <li>
+          <b>Controls:</b>
+          <ul style="margin-left:1.2em;">
+            <li><b>Arrow keys</b> (← ↑ → ↓)</li>
+            <li><b>WASD keys</b></li>
+            <li><b>Virtual joystick</b> (touchpad on mobile or mouse drag on desktop)</li>
+          </ul>
+        </li>
+        <li>Collect as many <b>yellow coins</b> as you can to score points.</li>
+        <li>Avoid <b>red (negative)</b> coins &mdash; they will slow you down!</li>
+        <li><b>Blue coins</b> give you bonus points!</li>
+        <li><b>Traps</b> (gray coins) may cause unexpected effects.</li>
+        <li>
+          <b>Pause:</b> Anyone can pause the game, but only the player who paused it can resume.
+        </li>
+        <li>When time is up, the player with the highest score wins. Good luck!</li>
+      </ul>
+      <button id="closeHowToPlayBtn" class="restart-button">✖ Close</button>
     </div>
   </div>
 

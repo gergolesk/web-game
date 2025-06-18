@@ -524,3 +524,11 @@ function showPauseOverlay(pausedBy, canResume) {
 function hidePauseOverlay() {
   document.getElementById('pauseOverlay').classList.add('hidden');
 }
+
+document.getElementById('howToPlayBtn').addEventListener('click', () => {
+  document.getElementById('howToPlayModal').classList.remove('hidden');
+});
+
+document.getElementById('closeHowToPlayBtn').addEventListener('click', () => {
+  document.getElementById('howToPlayModal').classList.add('hidden');
+});
