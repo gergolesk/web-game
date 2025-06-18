@@ -97,6 +97,12 @@ ws.onmessage = (event) => {
     durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
   }
 
+  if (data.type === 'name_taken') {
+    alert('This name is already taken. Please choose another one.');
+    document.getElementById('startModal').style.display = 'flex';
+    return;
+  }
+
   // Room is full (4 players)
   if (data.type === 'max_players') {
     document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">There are already 4 players in the game.<br>Please try later</div>';

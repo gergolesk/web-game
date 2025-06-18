@@ -124,6 +124,13 @@ wss.on('connection', (ws) => {
 
     // --- Player joins ---
     if (data.type === 'join') {
+
+      const nameTaken = Object.values(players).some(p => p.name === data.name);
+      if (nameTaken) {
+        ws.send(JSON.stringify({ type: 'name_taken' }));
+        return;
+      }
+
       playerId = data.id;
       ws.playerId = playerId;
 
