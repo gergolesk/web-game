@@ -13,6 +13,8 @@ let currentTimerStart = null;
 let lastReceivedPlayers = [];
 let hasJoined = false;
 
+let isGameReady = false;
+
 // Default client-side config (may be overridden by server)
 let gameConfig = {
   FIELD_WIDTH: 800,
@@ -61,6 +63,8 @@ ws.onmessage = (event) => {
     document.getElementById('waitingForHostModal')?.classList.add('hidden');
     document.getElementById('startModal')?.classList.add('hidden');
     document.getElementById('startGamePopup')?.classList.add('hidden');
+
+    showCountdownThenStart();
   }
 
   // Server sent new game config (field, speed, etc)
@@ -224,7 +228,11 @@ ws.onmessage = (event) => {
       }
     } else {
       if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
-        startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        if (!isGameReady) {
+          showCountdownThenStart(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        } else {
+          startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        }
       }
     }
   }
@@ -304,7 +312,7 @@ function gameLoop() {
   if (norm < 0.1) { dx = 0; dy = 0; }
 
   // Send movement to server
-  if (ws.readyState === 1) {
+  if (isGameReady && ws.readyState === 1) {
     ws.send(JSON.stringify({
       type: 'move',
       id: playerId,
@@ -549,3 +557,32 @@ document.getElementById('howToPlayBtn').addEventListener('click', () => {
 document.getElementById('closeHowToPlayBtn').addEventListener('click', () => {
   document.getElementById('howToPlayModal').classList.add('hidden');
 });
+
+// 3-2-1 GO
+let countdownAlreadyRunning = false;
+function showCountdownThenStart(duration, startedAt, pauseAccum) {
+  if (countdownAlreadyRunning) return;
+  countdownAlreadyRunning = true;
+
+  const countdownEl = document.getElementById('countdownDisplay');
+  const steps = ['3', '2', '1', 'GO!'];
+  let i = 0;
+
+  isGameReady = false;
+
+  countdownEl.classList.remove('hidden');
+  countdownEl.textContent = steps[i];
+
+  const interval = setInterval(() => {
+    i++;
+    if (i >= steps.length) {
+      clearInterval(interval);
+      countdownEl.classList.add('hidden');
+      isGameReady = true;
+      countdownAlreadyRunning = false;
+      startCountdownTimer(duration, startedAt, pauseAccum);
+    } else {
+      countdownEl.textContent = steps[i];
+    }
+  }, 1000);
+}
