@@ -56,6 +56,13 @@ ws.onmessage = (event) => {
     };
   }
 
+  // to another players
+  if (data.type === 'game_started') {
+    document.getElementById('waitingForHostModal')?.classList.add('hidden');
+    document.getElementById('startModal')?.classList.add('hidden');
+    document.getElementById('startGamePopup')?.classList.add('hidden');
+  }
+
   // Server sent new game config (field, speed, etc)
   if (data.type === 'game_config') {
     gameConfig = data.config;
@@ -64,10 +71,20 @@ ws.onmessage = (event) => {
 
   // Show modal waiting for players to join, controls game duration selection
   if (data.type === 'waiting_for_players') {
-    if (hasJoined) return;
     const isFirst = data.isFirstPlayer;
     const durationSet = typeof data.duration === 'number';
-    document.getElementById('startModal').style.display = 'flex';
+
+    // Hide the start modal
+    document.getElementById('startModal').style.display = 'none';
+
+    if (isFirst) {
+      // Show the host the "Start Game" modal
+      document.getElementById('startGamePopup').classList.remove('hidden');
+    } else {
+      // Show the non-host the waiting modal
+      document.getElementById('waitingForHostModal').classList.remove('hidden');
+    }
+
     document.getElementById('playerNameInput').value = playerName || '';
     const durationInput = document.getElementById('gameDurationInput');
     durationInput.value = data.duration || 60;
