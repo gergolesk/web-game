@@ -1,17 +1,13 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { gameConfig, PLAYER_COLORS } from './config.js';
 
-// Create a WebSocket server on port 3000
 const wss = new WebSocketServer({ port: 3000 });
 
-// === GAME CONSTANTS AND STATE ===
 const FIELD_WIDTH = gameConfig.FIELD_WIDTH;
 const FIELD_HEIGHT = gameConfig.FIELD_HEIGHT;
 const PACMAN_RADIUS = gameConfig.PACMAN_RADIUS;
 const POINT_RADIUS = gameConfig.POINT_RADIUS;
 const POINTS_TOTAL = gameConfig.POINTS_TOTAL;
-
-// Four starting positions for up to four players (with starting angles)
 const START_POSITIONS = [
   { x: 10,  y: 10, angle: 45 },
   { x: FIELD_WIDTH - (PACMAN_RADIUS*2) - 10, y: 10, angle: 135 },
@@ -21,34 +17,16 @@ const START_POSITIONS = [
 
 let points = [];
 let players = {};
-let cornerOccupants = [null, null, null, null]; // IDs of players occupying corners
+let cornerOccupants = [null, null, null, null];
 
-let gamePaused = false;
-let pausedBy = null;
-let pauseAccum = 0;
-let pauseStartedAt = null;
-
-// === BROADCAST GAME STATE TO ALL CLIENTS ===
-/**
- * Broadcasts the entire game state (players, points, timer, pause info, etc) to all connected clients.
- */
 function broadcastGameState() {
-  let totalPause = pauseAccum;
-  if (gamePaused && pauseStartedAt) {
-    totalPause += Date.now() - pauseStartedAt;
-  }
-
   const state = {
     players: Object.values(players),
     points: points,
     gameDuration: gameConfig.duration,
-    gameStartedAt: gameConfig.startTime,
-    gamePaused: gamePaused,
-    pausedBy: pausedBy,
-    pauseAccum: totalPause
+    gameStartedAt: gameConfig.startTime
   };
 
-  // Always provide up-to-date game timing info if started
   if (gameConfig.gameStarted && gameConfig.startTime && gameConfig.duration) {
     state.gameDuration = gameConfig.duration;
     state.gameStartedAt = gameConfig.startTime;
@@ -61,11 +39,7 @@ function broadcastGameState() {
   });
 }
 
-/**
- * Checks if a player's new position will collide with another player.
- */
 function willCollide(id, x, y) {
-  const RADIUS = PACMAN_RADIUS;
   const RADIUS = PACMAN_RADIUS;
   return Object.values(players).some(p => {
     if (p.id === id) return false;
@@ -79,21 +53,14 @@ function willCollide(id, x, y) {
   });
 }
 
-/**
- * Returns a random integer between min and max (inclusive).
- */
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Initialize main game config (timer, state)
-gameConfig.duration = null;     // seconds
+gameConfig.duration = null;     // секунд
 gameConfig.startTime = null;    // timestamp (Date.now())
 gameConfig.gameStarted = false;
 
-/**
- * Generates the array of points (coins), marks 2 of them as negative.
- */
 function generatePoints() {
   points = [];
   for (let i = 0; i < POINTS_TOTAL; ++i) {
@@ -105,14 +72,13 @@ function generatePoints() {
     });
   }
 
-  // Randomly pick 2 coins and set them as negative
+  // We choose 2 random coins that will be "negative"
   const shuffled = [...points].sort(() => Math.random() - 0.5);
   shuffled.slice(0, 1).forEach(pt => pt.type = "negative"); // замедление
   shuffled.slice(1, 2).forEach(pt => pt.type = "bonus");    // +5 очков
   shuffled.slice(2, 3).forEach(pt => pt.type = "trap");     // -3 очка
 }
 
-// === WEBSOCKET CONNECTION HANDLING ===
 wss.on('connection', (ws) => {
   let playerId = null;
   let myCorner = -1;
@@ -120,7 +86,7 @@ wss.on('connection', (ws) => {
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
 
-    // --- Player asks if they can join (any free slot?) ---
+    // Is it possible to connect (is there a free slot)
     if (data.type === 'can_join') {
       const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
@@ -130,37 +96,31 @@ wss.on('connection', (ws) => {
           type: 'can_join_ok',
           duration: gameConfig.duration
         }));
-        ws.send(JSON.stringify({
-          type: 'can_join_ok',
-          duration: gameConfig.duration
-        }));
       }
       return;
     }
 
-    // --- Player actually joins the game ---
     if (data.type === 'join') {
       playerId = data.id;
       ws.playerId = playerId;
-      ws.playerId = playerId;
 
-      // Check again if slot is free
+      // ✅ Проверяем до добавления игрока
       const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
         return;
       }
 
-      const isFirstPlayer = cornerOccupants.every(id => id === null);
+      const isFirstPlayer = cornerOccupants.every(id => id === null); // Все null — значит первый
 
-      // Only first player can set game duration
+      // ✅ Только первый игрок может установить duration
       if (isFirstPlayer && gameConfig.duration === null && typeof data.duration === 'number') {
         gameConfig.duration = data.duration;
         gameConfig.startTime = null;
         gameConfig.gameStarted = false;
       }
 
-      // Register the player
+      // Теперь добавляем игрока
       myCorner = freeCorner;
       cornerOccupants[myCorner] = playerId;
       players[playerId] = {
@@ -170,18 +130,14 @@ wss.on('connection', (ws) => {
         y: START_POSITIONS[myCorner].y,
         angle: START_POSITIONS[myCorner].angle,
         color: PLAYER_COLORS[myCorner],
-        color: PLAYER_COLORS[myCorner],
         corner: myCorner,
         score: 0,
-        slowUntil: 0,
-        readyToRestart: false
         slowUntil: 0,
         readyToRestart: false
       };
 
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
 
-      // If enough players, offer host to start the game
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
         const firstPlayerId = cornerOccupants.find(id => id !== null);
         const firstPlayerSocket = [...wss.clients].find(client => client.playerId === firstPlayerId);
@@ -194,7 +150,7 @@ wss.on('connection', (ws) => {
         }
       }
 
-      // Send waiting modal (with info about duration)
+      // Отправляем модалку ожидания
       ws.send(JSON.stringify({
         type: 'waiting_for_players',
         isFirstPlayer: isFirstPlayer,
@@ -205,9 +161,9 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // --- Player movement event ---
+
     if (data.type === 'move' && playerId && players[playerId]) {
-      if (!gameConfig.gameStarted || gamePaused) return;
+      if (!gameConfig.gameStarted) return;
       let speed = 4;
       if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) {
         speed = speed / 2;
@@ -226,21 +182,21 @@ wss.on('connection', (ws) => {
         newX = oldX + speed * dx / norm;
         newY = oldY + speed * dy / norm;
 
-        // Stay within field boundaries
+        // Field limits
         newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_RADIUS*2 ));
         newY = Math.max(0, Math.min(newY, FIELD_HEIGHT - PACMAN_RADIUS*2 ));
 
-        // Collision checking (players)
+        // Collision checking
         if (!willCollide(playerId, newX, newY)) {
           players[playerId].x = newX;
           players[playerId].y = newY;
           players[playerId].angle = angle;
         } else {
-          // Only update angle if blocked
+          // Only angle is changed
           players[playerId].angle = angle;
         }
       } else {
-        // Only rotation if not moving
+        // Rotate only
         players[playerId].angle = angle;
       }
       players[playerId].mouthOpen = !!data.mouthOpen;
@@ -254,7 +210,9 @@ wss.on('connection', (ws) => {
       const idx = points.findIndex(pt => pt.id === data.pointId);
       if (idx !== -1) {
         const point = points[idx];
+
         points.splice(idx, 1);
+
         switch (point.type) {
           case "negative":
             players[playerId].slowUntil = Date.now() + 2000;
@@ -302,27 +260,23 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // --- Player is ready to start a new game (clicked "Play Again") ---
+    // Игрок готов к новой игре (нажал "Play Again")
     if (data.type === 'ready_to_restart' && playerId && players[playerId]) {
-      pauseAccum = 0;
-      pauseStartedAt = null;
-      gamePaused = false;
-      pausedBy = null;
       players[playerId].readyToRestart = true;
 
       const allReady = Object.values(players).every(p => p.readyToRestart);
 
       if (allReady) {
-        // Reset game state for new round
+        // Сброс игрового состояния
         generatePoints();
         gameConfig.duration = null;
         gameConfig.startTime = null;
         gameConfig.gameStarted = false;
 
-        // Free all corners
+        // ✅ Сброс занятого угла
         cornerOccupants = [null, null, null, null];
 
-        // Reset player positions and flags
+        // Сброс позиций игроков
         Object.values(players).forEach((p, index) => {
           const corner = cornerOccupants.findIndex(id => id === p.id);
           if (corner !== -1) {
@@ -335,7 +289,7 @@ wss.on('connection', (ws) => {
           }
         });
 
-        // Notify all clients that new duration can be chosen
+        // Уведомляем всех о возможности выбора нового времени
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'ready_to_choose_duration' }));
@@ -347,12 +301,7 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // --- Host starts the game (by button click) ---
     if (data.type === 'start_game_by_host' && playerId && players[playerId]) {
-      pauseAccum = 0;
-      pauseStartedAt = null;
-      gamePaused = false;
-      pausedBy = null;
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
         gameConfig.startTime = Date.now();
@@ -373,71 +322,20 @@ wss.on('connection', (ws) => {
       }
       return;
     }
-
-    // --- Player requests to pause the game ---
-    if (data.type === 'pause_game' && playerId && players[playerId]) {
-      // Optional: check if game started and not already paused
-      if (!gamePaused && gameConfig.gameStarted) {
-        gamePaused = true;
-        pausedBy = players[playerId].name || playerId;
-        pauseStartedAt = Date.now();
-
-        // Notify all clients about pause
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'game_paused',
-              pausedBy: pausedBy
-            }));
-          }
-        });
-
-        broadcastGameState();
-      }
-      return;
-    }
-
-    // --- Player requests to resume (unpause) the game ---
-    if (data.type === 'unpause_game' && playerId && players[playerId]) {
-      // Only the player who paused the game can unpause it
-      if (gamePaused && pausedBy === (players[playerId].name || playerId)) {
-        gamePaused = false;
-        if (pauseStartedAt) {
-          pauseAccum += Date.now() - pauseStartedAt;
-          pauseStartedAt = null;
-        }
-        pausedBy = null;
-
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'game_unpaused'
-            }));
-          }
-        });
-
-        broadcastGameState();
-      }
-      return;
-    }
-
   });
 
-  /**
-   * Handle client disconnection, free up their corner, remove them from players, reset game if empty.
-   */
   ws.on('close', () => {
     if (playerId && players[playerId]) {
-      // Free up the corner
+      // Freeing up the corner
       if (typeof players[playerId].corner === 'number') {
         cornerOccupants[players[playerId].corner] = null;
       }
       delete players[playerId];
       broadcastGameState();
     }
-    // If all players left, reset game state
     if (Object.keys(players).length === 0) {
-      generatePoints();
+      generatePoints(); // reset points
+
       gameConfig.duration = null;
       gameConfig.startTime = null;
       gameConfig.gameStarted = false;
@@ -445,6 +343,5 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Generate points at server startup
 generatePoints();
 console.log('WebSocket server launched on ws://localhost:3000');
