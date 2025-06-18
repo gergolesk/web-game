@@ -8,70 +8,84 @@
 <body>
   <div id="game-area">
     <svg id="player" width="40" height="40" style="position:absolute; z-index:2;">
-    <defs>
+      <defs>
         <mask id="pacman-mask">
-        <circle cx="20" cy="20" r="20" fill="white"/>
-        <polygon id="mouth" points="20,20 40,10 40,30" fill="black"/>
+          <circle cx="20" cy="20" r="20" fill="white"/>
+          <polygon id="mouth" points="20,20 40,10 40,30" fill="black"/>
         </mask>
-    </defs>
-    <circle
+      </defs>
+      <circle
         id="player-circle"
         cx="20" cy="20" r="20"
         fill="yellow"
         mask="url(#pacman-mask)"
-    />
+      />
     </svg>
 
     <div id="other-players"></div>
     <div id="points"></div>
 
-      <div id="joystick">
-          <div id="stick"></div>
-      </div>
+   
   </div>
-  <div id="players-list"></div>
+  
+  <!-- Side bar -->
+  <div id="sidebar">
+    <div>
+      <div id="game-timer" class="game-timer">Time: 00:00</div>
+      <div id="players-list"></div>
+      <button id="pauseBtn">⏸ Pause</button>
+    </div>
+    <div id="joystick">
+      <div id="stick"></div>
+    </div>
+  </div>
 
   <audio id="coinSound" src="sounds/coin.mp3" preload="auto"></audio>
   <audio id="badCoinSound" src="sounds/negativeEffect.mp3" preload="auto"></audio>
 
   <div id="startModal" class="modal-overlay">
-      <div class="modal-content">
-          <h2>Start Game</h2>
-          <label>
-              Your name:
-              <input type="text" id="playerNameInput" placeholder="Enter your name" />
-          </label>
-          <label>
-              Game duration (seconds):
-              <select id="gameDurationInput">
-                  <option value="30">30</option>
-                  <option value="60" selected>60</option>
-                  <option value="90">90</option>
-              </select>
-          </label>
-          <button id="startGameBtn">Start</button>
-      </div>
+    <div class="modal-content">
+      <h2>Start Game</h2>
+      <label>
+        Your name:
+        <input type="text" id="playerNameInput" placeholder="Enter your name" />
+      </label>
+      <label>
+        Game duration (seconds):
+        <select id="gameDurationInput">
+          <option value="30">30</option>
+          <option value="60" selected>60</option>
+          <option value="90">90</option>
+        </select>
+      </label>
+      <button id="startGameBtn">Start</button>
+    </div>
   </div>
 
-  <div id="game-timer" class="game-timer">Time: 00:00</div>
-
   <div id="resultModal" class="modal-overlay hidden">
-      <div class="modal-content">
-          <h2>Game Ended</h2>
-          <div id="resultList"></div>
-          <button onclick="sendReadyToRestart()" class="restart-button">🔁 Play Again</button>
-      </div>
+    <div class="modal-content">
+      <h2>Game Ended</h2>
+      <div id="resultList"></div>
+      <button onclick="sendReadyToRestart()" class="restart-button">🔁 Play Again</button>
+    </div>
   </div>
 
   <div id="startGamePopup" class="modal-overlay hidden">
-      <div class="modal-content">
-          <p id="connectedPlayersInfo">Another player has joined!</p>
-          <button id="startGameBtnByHost">Start Game</button>
-          <p class="note">Or wait for more players to join...</p>
-      </div>
+    <div class="modal-content">
+      <p id="connectedPlayersInfo">Another player has joined!</p>
+      <button id="startGameBtnByHost">Start Game</button>
+      <p class="note">Or wait for more players to join...</p>
+    </div>
+  </div>
+
+  <div id="pauseOverlay" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h2>Game Paused</h2>
+      <p id="pauseByText"></p>
+      <button id="resumeBtn" style="display:none;">▶ Continue</button>
+    </div>
   </div>
 
   <script src="game.js"></script>
 </body>
 </html>
-
