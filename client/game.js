@@ -47,6 +47,22 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
 
+  if (data.type === 'offer_start_game') {
+    const popup = document.getElementById('startGamePopup');
+    const info = document.getElementById('connectedPlayersInfo');
+    const btn = document.getElementById('startGameBtnByHost');
+
+    // Обновим текст (сколько игроков подключилось)
+    info.textContent = `There are ${data.count} players online. Start now or wait for more?`;
+
+    popup.classList.remove('hidden');
+
+    btn.onclick = () => {
+      popup.classList.add('hidden');
+      ws.send(JSON.stringify({ type: 'start_game_by_host' }));
+    };
+  }
+
   // Server offers to start the game (host)
   if (data.type === 'offer_start_game') {
     const popup = document.getElementById('startGamePopup');
@@ -64,6 +80,24 @@ ws.onmessage = (event) => {
   if (data.type === 'game_config') {
     gameConfig = data.config;
     return;
+  }
+
+  if (data.type === 'waiting_for_players') {
+    if (hasJoined) return;
+
+    const isFirst = data.isFirstPlayer;
+    const durationSet = typeof data.duration === 'number';
+
+    document.getElementById('startModal').style.display = 'flex';
+    document.getElementById('playerNameInput').value = playerName || '';
+
+    const durationInput = document.getElementById('gameDurationInput');
+    durationInput.value = data.duration || 60; // всегда подставляем текущую, даже если не first
+    durationInput.disabled = !isFirst || durationSet;
+    durationInput.parentElement.style.opacity = (!isFirst || durationSet) ? '0.5' : '1';
+
+    // 👇 если хочешь полностью скрыть поле:
+    durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
   }
 
   // Show "waiting for players" modal and set controls for game duration
@@ -135,6 +169,10 @@ ws.onmessage = (event) => {
       if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
     }
 
+    if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
+      startCountdownTimer(data.gameDuration, data.gameStartedAt);
+    }
+
     // Render other players
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
@@ -193,14 +231,17 @@ ws.onmessage = (event) => {
         pointsDiv.appendChild(pointWrapper);
       }
 
-      // Update "negative-coin" class (even if already exists)
-      if (pt.isNegative) {
+      pointWrapper.classList.remove('negative-coin', 'bonus-coin', 'trap-coin'); // очистка
+
+      if (pt.type === "negative") {
         pointWrapper.classList.add('negative-coin');
-      } else {
-        pointWrapper.classList.remove('negative-coin');
+      } else if (pt.type === "bonus") {
+        pointWrapper.classList.add('bonus-coin');
+      } else if (pt.type === "trap") {
+        pointWrapper.classList.add('trap-coin');
       }
 
-      // Update coin position and size
+      // Обновляем позицию и размеры
       pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
@@ -218,7 +259,7 @@ ws.onmessage = (event) => {
       </div>`;
     });
     playersListDiv.innerHTML = playersListHtml;
-    
+
     // Handle pause overlay and timer
     if (data.gamePaused) {
       showPauseOverlay(data.pausedBy, data.pausedBy === playerName);
@@ -248,10 +289,25 @@ ws.onmessage = (event) => {
     }
   }
 
+    if (data.type === 'point_collected') {
+    if (data.pointType === 'negative') {
+      applySlowDebuff(2000);
+      playBadCoinSound();
+    } else if (data.pointType === 'bonus') {
+      playBonusSound();
+    } else if (data.pointType === 'trap') {
+      playTrapSound();
+    } else {
+      playCoinSound(); // обычная монета
+    }
+  }
+
   lastReceivedPlayers = data.players;
+
+
 };
 
-// === KEYBOARD CONTROLS ===
+
 addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
@@ -327,14 +383,10 @@ function gameLoop() {
     const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
     const dist = Math.sqrt(dX * dX + dY * dY);
     if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
-      const isNegative = pt.isNegative;
-      if (isNegative) {
-        applySlowDebuff(2000);
-        playBadCoinSound();
-      } else {
-        triggerCoinCollectEffect(pt.x, pt.y);
-        playCoinSound();
-      }
+
+      triggerCoinCollectEffect(pt.x, pt.y);
+      ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
+
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
@@ -418,6 +470,38 @@ function playCoinSound() {
  */
 function playBadCoinSound() {
   const snd = document.getElementById('badCoinSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playBonusSound() {
+  const snd = document.getElementById('bonusSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playTrapSound() {
+  const snd = document.getElementById('trapSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playBonusSound() {
+  const snd = document.getElementById('bonusSound');
+  if (snd) {
+    snd.currentTime = 0;
+    snd.play().catch(() => {});
+  }
+}
+
+function playTrapSound() {
+  const snd = document.getElementById('trapSound');
   if (snd) {
     snd.currentTime = 0;
     snd.play().catch(() => {});
@@ -608,4 +692,204 @@ function showPauseOverlay(pausedBy, canResume) {
  */
 function hidePauseOverlay() {
   document.getElementById('pauseOverlay').classList.add('hidden');
+}
+
+// === START GAME / JOIN HANDLER === 
+document.getElementById('startGameBtn').addEventListener('click', () => {
+  const nameInput = document.getElementById('playerNameInput');
+  const durationInput = document.getElementById('gameDurationInput');
+
+  const name = nameInput.value.trim();
+  const duration = parseInt(durationInput.value);
+
+  if (!name) {
+    alert('Please enter a name!');
+    return;
+  }
+
+  playerName = name;
+  document.getElementById('startModal').style.display = 'none';
+
+  ws.send(JSON.stringify({
+    type: 'join',
+    id: playerId,
+    name: playerName,
+    color: playerColor,
+    duration: duration
+  }));
+  hasJoined = true;
+});
+
+// === TIMER FUNCTIONS ===
+/**
+ * Starts and updates the countdown game timer.
+ */
+function startCountdownTimer(duration, startedAt, pauseAccum) {
+  const el = document.getElementById('game-timer');
+  if (!el) return;
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  el.style.display = 'block';
+
+  function update() {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startedAt - (pauseAccum || 0)) / 1000);
+    const remaining = Math.max(0, duration - elapsed);
+
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    el.textContent = `Time: ${minutes}:${seconds}`;
+
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      el.textContent = 'Game Ended';
+      showGameResults(lastReceivedPlayers || []);
+    }
+  }
+
+  update(); // Show immediately
+  timerInterval = setInterval(update, 1000);
+}
+
+/**
+ * Displays the end-of-game results modal.
+ */
+function showGameResults(players) {
+  const modal = document.getElementById('resultModal');
+  const list = document.getElementById('resultList');
+  modal.classList.remove('hidden');
+
+  const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  list.innerHTML = sorted.map((p, i) => {
+    const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
+    return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
+  }).join('');
+}
+
+/**
+ * Hides the results modal and signals readiness to restart to the server.
+ */
+function sendReadyToRestart() {
+  const modal = document.getElementById('resultModal');
+  if (modal) modal.classList.add('hidden');
+  ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+}
+
+// === PAUSE/RESUME CONTROLS ===
+// Pause button click event
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  ws.send(JSON.stringify({ type: 'pause_game' }));
+});
+
+// Pause by keyboard "Pause" key
+window.addEventListener('keydown', e => {
+  if (e.key === 'Pause' || e.code === 'Pause') {
+    ws.send(JSON.stringify({ type: 'pause_game' }));
+  }
+});
+
+// Resume button click event
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  ws.send(JSON.stringify({ type: 'unpause_game' }));
+});
+
+/**
+ * Displays the pause overlay with info about who paused the game.
+ */
+function showPauseOverlay(pausedBy, canResume) {
+  document.getElementById('pauseOverlay').classList.remove('hidden');
+  document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
+  const btn = document.getElementById('resumeBtn');
+  // Only initiator sees the "Resume" button
+  if (canResume) {
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+/**
+ * Hides the pause overlay.
+ */
+function hidePauseOverlay() {
+  document.getElementById('pauseOverlay').classList.add('hidden');
+}
+
+document.getElementById('startGameBtn').addEventListener('click', () => {
+  const nameInput = document.getElementById('playerNameInput');
+  const durationInput = document.getElementById('gameDurationInput');
+
+  const name = nameInput.value.trim();
+  const duration = parseInt(durationInput.value);
+
+  if (!name) {
+    alert('Please enter a name!');
+    return;
+  }
+
+  playerName = name;
+
+  document.getElementById('startModal').style.display = 'none';
+
+  ws.send(JSON.stringify({
+    type: 'join',
+    id: playerId,
+    name: playerName,
+    color: playerColor,
+    duration: duration
+  }));
+  hasJoined = true;
+});
+
+
+function startCountdownTimer(duration, startedAt) {
+  const el = document.getElementById('game-timer');
+  if (!el) return;
+
+  // предотвратить повторный запуск
+  if (currentTimerStart === startedAt) return;
+  currentTimerStart = startedAt;
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  el.style.display = 'block';
+
+  timerInterval = setInterval(() => {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startedAt) / 1000);
+    const remaining = Math.max(0, duration - elapsed);
+
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    el.textContent = `Time: ${minutes}:${seconds}`;
+
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      el.textContent = 'Game Ended';
+
+      showGameResults(lastReceivedPlayers || []);
+    }
+  }, 1000);
+}
+
+function showGameResults(players) {
+  const modal = document.getElementById('resultModal');
+  const list = document.getElementById('resultList');
+  modal.classList.remove('hidden');
+
+  const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  list.innerHTML = sorted.map((p, i) => {
+    const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
+    return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
+  }).join('');
+}
+
+function sendReadyToRestart() {
+  const modal = document.getElementById('resultModal');
+  if (modal) modal.classList.add('hidden');
+  ws.send(JSON.stringify({ type: 'ready_to_restart' }));
 }

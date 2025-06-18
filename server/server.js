@@ -66,6 +66,7 @@ function broadcastGameState() {
  */
 function willCollide(id, x, y) {
   const RADIUS = PACMAN_RADIUS;
+  const RADIUS = PACMAN_RADIUS;
   return Object.values(players).some(p => {
     if (p.id === id) return false;
     const dx = p.x - x;
@@ -98,15 +99,17 @@ function generatePoints() {
   for (let i = 0; i < POINTS_TOTAL; ++i) {
     points.push({
       id: i + 1,
-      x: randomInt(PACMAN_RADIUS*2, FIELD_WIDTH - PACMAN_RADIUS*2),
-      y: randomInt(PACMAN_RADIUS*2, FIELD_HEIGHT - PACMAN_RADIUS*2),
-      isNegative: false
+      x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+      y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+      type: "normal"
     });
   }
 
   // Randomly pick 2 coins and set them as negative
   const shuffled = [...points].sort(() => Math.random() - 0.5);
-  shuffled.slice(0, 2).forEach(pt => pt.isNegative = true);
+  shuffled.slice(0, 1).forEach(pt => pt.type = "negative"); // замедление
+  shuffled.slice(1, 2).forEach(pt => pt.type = "bonus");    // +5 очков
+  shuffled.slice(2, 3).forEach(pt => pt.type = "trap");     // -3 очка
 }
 
 // === WEBSOCKET CONNECTION HANDLING ===
@@ -127,6 +130,10 @@ wss.on('connection', (ws) => {
           type: 'can_join_ok',
           duration: gameConfig.duration
         }));
+        ws.send(JSON.stringify({
+          type: 'can_join_ok',
+          duration: gameConfig.duration
+        }));
       }
       return;
     }
@@ -134,6 +141,7 @@ wss.on('connection', (ws) => {
     // --- Player actually joins the game ---
     if (data.type === 'join') {
       playerId = data.id;
+      ws.playerId = playerId;
       ws.playerId = playerId;
 
       // Check again if slot is free
@@ -162,8 +170,11 @@ wss.on('connection', (ws) => {
         y: START_POSITIONS[myCorner].y,
         angle: START_POSITIONS[myCorner].angle,
         color: PLAYER_COLORS[myCorner],
+        color: PLAYER_COLORS[myCorner],
         corner: myCorner,
         score: 0,
+        slowUntil: 0,
+        readyToRestart: false
         slowUntil: 0,
         readyToRestart: false
       };
@@ -237,43 +248,54 @@ wss.on('connection', (ws) => {
       broadcastGameState();
     }
 
-    // --- Player collected a point (coin) ---
+    // The client reported the collection point
     if (data.type === 'collect_point' && playerId && players[playerId]) {
       // Find a point by id
       const idx = points.findIndex(pt => pt.id === data.pointId);
       if (idx !== -1) {
         const point = points[idx];
-
         points.splice(idx, 1);
+        switch (point.type) {
+          case "negative":
+            players[playerId].slowUntil = Date.now() + 2000;
+            // сразу создаём новую негативную
+            points.push({
+              id: Date.now(),
+              x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+              y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+              type: "negative"
+            });
+            break;
 
-        if (point.isNegative) {
-          players[playerId].slowUntil = Date.now() + 2000;
+          case "bonus":
+            players[playerId].score = (players[playerId].score || 0) + 5;
+            break;
 
-          // ✨ Generate a new negative coin
-          const newNegative =  {
-            id: Date.now(),
-            x: randomInt(PACMAN_RADIUS * 2 , FIELD_WIDTH - PACMAN_RADIUS * 2),
-            y: randomInt(PACMAN_RADIUS * 2 , FIELD_HEIGHT - PACMAN_RADIUS * 2),
-            isNegative: true
-          };
-          points.push(newNegative);
-        } else {
-          players[playerId].score = (players[playerId].score || 0) + 1;
+          case "trap":
+            players[playerId].score = Math.max(0, (players[playerId].score || 0) - 3);
+            break;
 
-          // ✨ If there are too few regular coins left, add more
-          const remainingNormals = points.filter(p => !p.isNegative).length;
-          if(remainingNormals < 10) {
-            const countToAdd = 3;
-            for(let i = 0; i < countToAdd; i++) {
-              points.push({
-                id: Date.now() + i,
-                x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
-                y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
-                isNegative: false
-              });
+          default: // "normal"
+            players[playerId].score = (players[playerId].score || 0) + 1;
+
+            const remainingNormals = points.filter(p => p.type === "normal").length;
+            if (remainingNormals < 10) {
+              for (let i = 0; i < 3; i++) {
+                points.push({
+                  id: Date.now() + i,
+                  x: randomInt(PACMAN_RADIUS * 2, FIELD_WIDTH - PACMAN_RADIUS * 2),
+                  y: randomInt(PACMAN_RADIUS * 2, FIELD_HEIGHT - PACMAN_RADIUS * 2),
+                  type: "normal"
+                });
+              }
             }
-          }
         }
+
+        ws.send(JSON.stringify({
+          type: 'point_collected',
+          pointId: point.id,
+          pointType: point.type
+        }));
 
         broadcastGameState();
       }

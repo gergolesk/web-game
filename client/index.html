@@ -42,6 +42,45 @@
 
   <audio id="coinSound" src="sounds/coin.mp3" preload="auto"></audio>
   <audio id="badCoinSound" src="sounds/negativeEffect.mp3" preload="auto"></audio>
+  <audio id="bonusSound" src="sounds/bonus.mp3" preload="auto"></audio>
+  <audio id="trapSound" src="sounds/trap.mp3" preload="auto"></audio>
+
+  <div id="startModal" class="modal-overlay">
+      <div class="modal-content">
+          <h2>Start Game</h2>
+          <label>
+              Your name:
+              <input type="text" id="playerNameInput" placeholder="Enter your name" />
+          </label>
+          <label>
+              Game duration (seconds):
+              <select id="gameDurationInput">
+                  <option value="30">30</option>
+                  <option value="60" selected>60</option>
+                  <option value="90">90</option>
+              </select>
+          </label>
+          <button id="startGameBtn">Start</button>
+      </div>
+  </div>
+
+  <div id="game-timer" class="game-timer">Time: 00:00</div>
+
+  <div id="resultModal" class="modal-overlay hidden">
+      <div class="modal-content">
+          <h2>Game Ended</h2>
+          <div id="resultList"></div>
+          <button onclick="sendReadyToRestart()" class="restart-button">🔁 Play Again</button>
+      </div>
+  </div>
+
+  <div id="startGamePopup" class="modal-overlay hidden">
+      <div class="modal-content">
+          <p id="connectedPlayersInfo">Another player has joined!</p>
+          <button id="startGameBtnByHost">Start Game</button>
+          <p class="note">Or wait for more players to join...</p>
+      </div>
+  </div>
 
   <div id="startModal" class="modal-overlay">
     <div class="modal-content">
