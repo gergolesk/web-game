@@ -1,9 +1,12 @@
 // PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, and sound
 
+// === GLOBAL CONSTANTS AND VARIABLES ===
 const POINT_RADIUS = 8;
 
+// Unique player id and color
 const playerId = Math.random().toString(36).substr(2, 9);
 const playerColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+
 let playerName = null;
 let points = [];
 let timerInterval = null;
@@ -11,6 +14,7 @@ let currentTimerStart = null;
 let lastReceivedPlayers = [];
 let hasJoined = false;
 
+// Game configuration object, updated from server
 let gameConfig = {
   FIELD_WIDTH: 800,
   FIELD_HEIGHT: 600,
@@ -20,18 +24,22 @@ let gameConfig = {
   PACMAN_SPEED: 4
 };
 
+// Initialize WebSocket connection to game server
 const ws = new WebSocket('ws://' + window.location.hostname + ':3000');
 
+// Player position and control state
 let pos = { x: 100, y: 100 };
 let lastAngle = 0;
 const keys = {};
 let virtualDir = { dx: 0, dy: 0 };
 
+// DOM elements for player and other players
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
 const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
 
+// === WEBSOCKET EVENT HANDLERS ===
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'can_join' }));
 };
@@ -39,30 +47,28 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
 
+  // Server offers to start the game (host)
   if (data.type === 'offer_start_game') {
     const popup = document.getElementById('startGamePopup');
     const info = document.getElementById('connectedPlayersInfo');
     const btn = document.getElementById('startGameBtnByHost');
-
-    // Обновим текст (сколько игроков подключилось)
     info.textContent = `There are ${data.count} players online. Start now or wait for more?`;
-
     popup.classList.remove('hidden');
-
     btn.onclick = () => {
       popup.classList.add('hidden');
       ws.send(JSON.stringify({ type: 'start_game_by_host' }));
     };
   }
 
+  // Receive new game config from server
   if (data.type === 'game_config') {
     gameConfig = data.config;
     return;
   }
 
+  // Show "waiting for players" modal and set controls for game duration
   if (data.type === 'waiting_for_players') {
     if (hasJoined) return;
-
     const isFirst = data.isFirstPlayer;
     const durationSet = typeof data.duration === 'number';
 
@@ -70,20 +76,20 @@ ws.onmessage = (event) => {
     document.getElementById('playerNameInput').value = playerName || '';
 
     const durationInput = document.getElementById('gameDurationInput');
-    durationInput.value = data.duration || 60; // всегда подставляем текущую, даже если не first
+    durationInput.value = data.duration || 60;
     durationInput.disabled = !isFirst || durationSet;
     durationInput.parentElement.style.opacity = (!isFirst || durationSet) ? '0.5' : '1';
-
-    // 👇 если хочешь полностью скрыть поле:
     durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
   }
 
+  // Game already has max players, block join
   if (data.type === 'max_players') {
     document.body.innerHTML = '<div style="color:yellow; background:#222; font-size:2em; text-align:center; margin-top:30vh;">There are already 4 players in the game.<br>Please try later</div>';
     ws.close();
     return;
   }
 
+  // Player can join, show modal for name and duration input
   if (data.type === 'can_join_ok') {
     document.getElementById('startModal').style.display = 'flex';
     document.getElementById('playerNameInput').value = playerName || '';
@@ -94,9 +100,10 @@ ws.onmessage = (event) => {
 
     durationInput.disabled = durationSet;
     durationInput.parentElement.style.opacity = durationSet ? '0.5' : '1';
-    durationInput.parentElement.style.display = durationSet ? 'none' : 'block'; // 🔒 скрыть у всех кроме первого
+    durationInput.parentElement.style.display = durationSet ? 'none' : 'block'; // 🔒 Hide from all but the first
   }
 
+  // Server allows to choose game duration
   if (data.type === 'ready_to_choose_duration') {
     document.getElementById('startModal').style.display = 'flex';
     document.getElementById('playerNameInput').value = playerName || '';
@@ -107,15 +114,19 @@ ws.onmessage = (event) => {
     durationInput.parentElement.style.display = 'block';
   }
 
+  // Game paused by someone
   if (data.type === 'game_paused') {
     showPauseOverlay(data.pausedBy);
   }
 
+  // Game unpaused
   if (data.type === 'game_unpaused') {
     hidePauseOverlay();
   }
 
+  // Receive main game state from server
   if (data.type === 'state') {
+    // Update your own position, angle and color
     const me = data.players.find(p => p.id === playerId);
     if (me) {
       pos.x = me.x;
@@ -123,15 +134,8 @@ ws.onmessage = (event) => {
       lastAngle = me.angle || 0;
       if (myCircle) myCircle.setAttribute('fill', me.color || 'yellow');
     }
-    /*
-    // Сначала остановить текущий таймер
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = null;
-    // Затем запустить с новыми данными
-    if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
-      startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
-    }
-*/
+
+    // Render other players
     otherPlayersDiv.innerHTML = '';
     data.players.forEach(p => {
       if (p.id === playerId) return;
@@ -156,24 +160,25 @@ ws.onmessage = (event) => {
       otherPlayersDiv.appendChild(el);
     });
 
+    // Render coins/points
     points = data.points || [];
     const pointsDiv = document.getElementById('points');
 
-    // Собираем ID текущих монет с сервера
+    // Collect the IDs of currently active coins from the server
     const newIds = new Set(points.map(p => 'point-' + p.id));
 
-// Удаляем только те DOM-элементы, которых нет больше в списке
+    // Remove only DOM elements no longer present in server list
     [...pointsDiv.children].forEach(child => {
       if (!newIds.has(child.id) && !child.classList.contains('sparkle')) {
         child.remove();
       }
     });
 
-
     points.forEach(pt => {
       let pointWrapper = document.getElementById('point-' + pt.id);
       const isNew = !pointWrapper;
 
+      // Add new coin DOM element if not exists
       if (isNew) {
         pointWrapper = document.createElement('div');
         pointWrapper.id = 'point-' + pt.id;
@@ -188,20 +193,21 @@ ws.onmessage = (event) => {
         pointsDiv.appendChild(pointWrapper);
       }
 
-      // 🧼 Обновляем класс "negative-coin" (даже если уже есть)
+      // Update "negative-coin" class (even if already exists)
       if (pt.isNegative) {
         pointWrapper.classList.add('negative-coin');
       } else {
         pointWrapper.classList.remove('negative-coin');
       }
 
-      // Обновляем позицию и размеры
+      // Update coin position and size
       pointWrapper.style.left = (pt.x - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.top = (pt.y - gameConfig.POINT_RADIUS) + 'px';
       pointWrapper.style.width = (gameConfig.POINT_RADIUS * 2) + 'px';
       pointWrapper.style.height = (gameConfig.POINT_RADIUS * 2) + 'px';
     });
 
+    // Render player list with scores
     let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
     data.players.forEach(p => {
       let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
@@ -213,22 +219,18 @@ ws.onmessage = (event) => {
     });
     playersListDiv.innerHTML = playersListHtml;
     
+    // Handle pause overlay and timer
     if (data.gamePaused) {
       showPauseOverlay(data.pausedBy, data.pausedBy === playerName);
     } else {
       hidePauseOverlay();
     }
-    /*
-    // обновляем таймер (учитываем паузу)
-    if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
-      startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
-    }
-    */
+
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
 
     if (data.gamePaused) {
-      // Если пауза, просто показать "замороженное" время один раз
+      // If game is paused, just show the "frozen" time once
       const el = document.getElementById('game-timer');
       if (el) {
         const now = Date.now();
@@ -239,7 +241,7 @@ ws.onmessage = (event) => {
         el.textContent = `Time: ${minutes}:${seconds}`;
       }
     } else {
-      // Только если ИГРА НЕ на паузе — запускай setInterval!
+      // Only start setInterval if the game is NOT paused
       if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
         startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
       }
@@ -249,14 +251,21 @@ ws.onmessage = (event) => {
   lastReceivedPlayers = data.players;
 };
 
+// === KEYBOARD CONTROLS ===
 addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
+/**
+ * Calculates the movement angle for Pac-Man, based on dx/dy vector.
+ */
 function getDirectionAngle(dx, dy) {
   if (dx === 0 && dy === 0) return lastAngle;
   return Math.atan2(dy, dx) * 180 / Math.PI;
 }
 
+/**
+ * Updates the player DOM element position and rotation.
+ */
 function updatePlayer() {
   player.style.left = pos.x + 'px';
   player.style.top = pos.y + 'px';
@@ -264,6 +273,9 @@ function updatePlayer() {
 }
 
 let mouthOpen = true, mouthTimer = 0, lastX = pos.x, lastY = pos.y;
+/**
+ * Animates Pac-Man's mouth if he is moving.
+ */
 function animateMouth() {
   const mouth = document.getElementById('mouth');
   if (!mouth) return;
@@ -281,10 +293,14 @@ function animateMouth() {
   }
 }
 
+/**
+ * Main game loop, sends movement, checks coin collisions, triggers animations.
+ */
 function gameLoop() {
   let dx = virtualDir.dx || 0;
   let dy = virtualDir.dy || 0;
 
+  // Combine keyboard and virtual joystick input
   if (keys['arrowup'] || keys['w']) dy -= 1;
   if (keys['arrowdown'] || keys['s']) dy += 1;
   if (keys['arrowleft'] || keys['a']) dx -= 1;
@@ -293,6 +309,7 @@ function gameLoop() {
   const norm = Math.sqrt(dx * dx + dy * dy);
   if (norm < 0.1) { dx = 0; dy = 0; }
 
+  // Send player move event to server
   if (ws.readyState === 1) {
     ws.send(JSON.stringify({
       type: 'move',
@@ -304,6 +321,7 @@ function gameLoop() {
     }));
   }
 
+  // Coin collision check
   points.forEach(pt => {
     const dX = pt.x - (pos.x + gameConfig.PACMAN_RADIUS);
     const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
@@ -317,7 +335,6 @@ function gameLoop() {
         triggerCoinCollectEffect(pt.x, pt.y);
         playCoinSound();
       }
-
       ws.send(JSON.stringify({ type: 'collect_point', pointId: pt.id }));
     }
   });
@@ -327,9 +344,11 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+// Start the game loop and player rendering
 updatePlayer();
 gameLoop();
 
+// === VIRTUAL JOYSTICK HANDLING ===
 const joystick = document.getElementById('joystick');
 const stick = document.getElementById('stick');
 let joystickCenter = { x: 0, y: 0 };
@@ -337,15 +356,20 @@ let dragging = false;
 
 let isSlowed = false;
 
+/**
+ * Applies a grayscale "slowdown" effect on the player circle for a duration.
+ */
 function applySlowDebuff(duration) {
   const playerEl = document.getElementById('player-circle');
   if (playerEl) playerEl.style.filter = 'grayscale(100%)';
-
   setTimeout(() => {
     if (playerEl) playerEl.style.filter = '';
   }, duration);
 }
 
+/**
+ * Calculates joystick direction and updates Pac-Man movement.
+ */
 function updateJoystickDirection(touchX, touchY) {
   const rect = joystick.getBoundingClientRect();
   joystickCenter.x = rect.left + rect.width / 2;
@@ -368,6 +392,9 @@ function updateJoystickDirection(touchX, touchY) {
   virtualDir.dy = dy / maxDist;
 }
 
+/**
+ * Resets the joystick stick to center position and stops movement.
+ */
 function resetJoystick() {
   stick.style.left = '30px';
   stick.style.top = '30px';
@@ -375,6 +402,9 @@ function resetJoystick() {
   virtualDir.dy = 0;
 }
 
+/**
+ * Plays the positive coin sound.
+ */
 function playCoinSound() {
   const snd = document.getElementById('coinSound');
   if (snd) {
@@ -383,6 +413,9 @@ function playCoinSound() {
   }
 }
 
+/**
+ * Plays the negative coin sound.
+ */
 function playBadCoinSound() {
   const snd = document.getElementById('badCoinSound');
   if (snd) {
@@ -391,6 +424,9 @@ function playBadCoinSound() {
   }
 }
 
+/**
+ * Shows an animated "sparkle" effect when a coin is collected.
+ */
 function triggerCoinCollectEffect(x, y) {
   const sparkle = document.createElement('div');
   sparkle.style.position = 'absolute';
@@ -416,6 +452,7 @@ function triggerCoinCollectEffect(x, y) {
   setTimeout(() => sparkle.remove(), 300);
 }
 
+// === JOYSTICK AND MOUSE EVENTS ===
 joystick.addEventListener('touchstart', e => {
   if (e.touches.length > 0) {
     updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
@@ -449,6 +486,7 @@ window.addEventListener('mouseup', () => {
   }
 });
 
+// === START GAME / JOIN HANDLER ===
 document.getElementById('startGameBtn').addEventListener('click', () => {
   const nameInput = document.getElementById('playerNameInput');
   const durationInput = document.getElementById('gameDurationInput');
@@ -462,7 +500,6 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
   }
 
   playerName = name;
-
   document.getElementById('startModal').style.display = 'none';
 
   ws.send(JSON.stringify({
@@ -475,38 +512,10 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
   hasJoined = true;
 });
 
-/*
-function startCountdownTimer(duration, startedAt, pauseAccum) {
-  const el = document.getElementById('game-timer');
-  if (!el) return;
-
-  // предотвратить повторный запуск
-  if (currentTimerStart === startedAt) return;
-  currentTimerStart = startedAt;
-
-  if (timerInterval) clearInterval(timerInterval);
-
-  el.style.display = 'block';
-
-  timerInterval = setInterval(() => {
-    const now = Date.now();
-    const elapsed = Math.floor((now - startedAt - (pauseAccum || 0)) / 1000);
-    const remaining = Math.max(0, duration - elapsed);
-
-    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
-    const seconds = String(remaining % 60).padStart(2, '0');
-    el.textContent = `Time: ${minutes}:${seconds}`;
-
-    if (remaining === 0) {
-      clearInterval(timerInterval);
-      el.textContent = 'Game Ended';
-
-      showGameResults(lastReceivedPlayers || []);
-    }
-  }, 1000);
-}
-*/
-
+// === TIMER FUNCTIONS ===
+/**
+ * Starts and updates the countdown game timer.
+ */
 function startCountdownTimer(duration, startedAt, pauseAccum) {
   const el = document.getElementById('game-timer');
   if (!el) return;
@@ -532,11 +541,13 @@ function startCountdownTimer(duration, startedAt, pauseAccum) {
     }
   }
 
-  update(); // показываем сразу
+  update(); // Show immediately
   timerInterval = setInterval(update, 1000);
 }
 
-
+/**
+ * Displays the end-of-game results modal.
+ */
 function showGameResults(players) {
   const modal = document.getElementById('resultModal');
   const list = document.getElementById('resultList');
@@ -550,40 +561,51 @@ function showGameResults(players) {
   }).join('');
 }
 
+/**
+ * Hides the results modal and signals readiness to restart to the server.
+ */
 function sendReadyToRestart() {
   const modal = document.getElementById('resultModal');
   if (modal) modal.classList.add('hidden');
   ws.send(JSON.stringify({ type: 'ready_to_restart' }));
 }
 
-//Pause buttons
+// === PAUSE/RESUME CONTROLS ===
+// Pause button click event
 document.getElementById('pauseBtn').addEventListener('click', () => {
   ws.send(JSON.stringify({ type: 'pause_game' }));
 });
 
-// По клавише "Pause"
+// Pause by keyboard "Pause" key
 window.addEventListener('keydown', e => {
   if (e.key === 'Pause' || e.code === 'Pause') {
     ws.send(JSON.stringify({ type: 'pause_game' }));
   }
 });
 
-// Resume button
+// Resume button click event
 document.getElementById('resumeBtn').addEventListener('click', () => {
   ws.send(JSON.stringify({ type: 'unpause_game' }));
 });
 
+/**
+ * Displays the pause overlay with info about who paused the game.
+ */
 function showPauseOverlay(pausedBy, canResume) {
   document.getElementById('pauseOverlay').classList.remove('hidden');
   document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
   const btn = document.getElementById('resumeBtn');
-  // Только инициатор видит кнопку "Продолжить"
+  // Only initiator sees the "Resume" button
   if (canResume) {
     btn.style.display = '';
   } else {
     btn.style.display = 'none';
   }
 }
+
+/**
+ * Hides the pause overlay.
+ */
 function hidePauseOverlay() {
   document.getElementById('pauseOverlay').classList.add('hidden');
 }

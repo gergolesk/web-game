@@ -8,7 +8,7 @@ body {
   font-family: 'Arial', sans-serif;
 }
 
-/* Игровое поле */
+/* Game field*/
 #game-area {
   position: relative;
   width: 800px;
@@ -59,28 +59,28 @@ body {
   height: 60px;
   background: #fff;
   border-radius: 50%;
-  position: absolute;  /* Важно! */
-  left: 30px;          /* Центрирование (120-60)/2 */
+  position: absolute;  
+  left: 30px;          /* Centre (120-60)/2 */
   top: 30px;
   transition: 0.1s;
   box-shadow: 0 0 8px #aaa;
 }
 
-/* Правая панель */
+/* Right bar */
 #sidebar {
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* вот магия! */
+  justify-content: space-between;
   align-items: stretch;
   min-width: 210px;
   margin-left: 30px;
   margin-top: 20px;
-  height: 600px; /* совпадает с высотой игрового поля */
+  height: 600px; /* like a game area height */
   z-index: 100;
   box-sizing: border-box;
 }
 
-/* Таймер */
+/* Timer */
 #game-timer {
   position: static;
   margin-bottom: 18px;
@@ -97,7 +97,7 @@ body {
   display: block;
 }
 
-/* Список игроков */
+/* Players list */
 #players-list {
   position: static;
   background: #252525;
@@ -129,7 +129,7 @@ body {
   filter: brightness(1.5);
 }
 
-/* Кнопка паузы */
+/* Pause button */
 #pauseBtn {
   width: 100%;
   padding: 14px 0;
@@ -148,7 +148,7 @@ body {
   background: #333;
 }
 
-/* Остальные стили (монеты, модалки и т.д.) */
+/* Other styles (coins, modals, etc.) */
 .coin {
   position: absolute;
   width: 16px;
