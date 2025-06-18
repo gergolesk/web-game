@@ -322,8 +322,60 @@ wss.on('connection', (ws) => {
       }
       return;
     }
+
+    // --- Player requests to pause the game ---
+    if (data.type === 'pause_game' && playerId && players[playerId]) {
+      // Optional: check if game started and not already paused
+      if (!gamePaused && gameConfig.gameStarted) {
+        gamePaused = true;
+        pausedBy = players[playerId].name || playerId;
+        pauseStartedAt = Date.now();
+
+        // Notify all clients about pause
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'game_paused',
+              pausedBy: pausedBy
+            }));
+          }
+        });
+
+        broadcastGameState();
+      }
+      return;
+    }
+
+    // --- Player requests to resume (unpause) the game ---
+    if (data.type === 'unpause_game' && playerId && players[playerId]) {
+      // Only the player who paused the game can unpause it
+      if (gamePaused && pausedBy === (players[playerId].name || playerId)) {
+        gamePaused = false;
+        if (pauseStartedAt) {
+          pauseAccum += Date.now() - pauseStartedAt;
+          pauseStartedAt = null;
+        }
+        pausedBy = null;
+
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'game_unpaused'
+            }));
+          }
+        });
+
+        broadcastGameState();
+      }
+      return;
+    }
+
   });
 
+  /**
+   * Handle client disconnection, free up their corner, remove them from players, reset game if empty.
+   */
+  
   ws.on('close', () => {
     if (playerId && players[playerId]) {
       // Freeing up the corner
