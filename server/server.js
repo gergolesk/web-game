@@ -404,6 +404,7 @@ wss.on('connection', (ws) => {
   /**
    * Handle client disconnection, free up their corner, remove them from players, reset game if empty.
    */
+  
   ws.on('close', () => {
     if (playerId && players[playerId]) {
       // Free up the corner
