@@ -13,6 +13,8 @@ let currentTimerStart = null;
 let lastReceivedPlayers = [];
 let hasJoined = false;
 
+let isGameReady = false;
+
 // Default client-side config (may be overridden by server)
 let gameConfig = {
   FIELD_WIDTH: 800,
@@ -56,6 +58,15 @@ ws.onmessage = (event) => {
     };
   }
 
+  // to another players
+  if (data.type === 'game_started') {
+    document.getElementById('waitingForHostModal')?.classList.add('hidden');
+    document.getElementById('startModal')?.classList.add('hidden');
+    document.getElementById('startGamePopup')?.classList.add('hidden');
+
+    showCountdownThenStart();
+  }
+
   // Server sent new game config (field, speed, etc)
   if (data.type === 'game_config') {
     gameConfig = data.config;
@@ -64,16 +75,32 @@ ws.onmessage = (event) => {
 
   // Show modal waiting for players to join, controls game duration selection
   if (data.type === 'waiting_for_players') {
-    if (hasJoined) return;
     const isFirst = data.isFirstPlayer;
     const durationSet = typeof data.duration === 'number';
-    document.getElementById('startModal').style.display = 'flex';
+
+    // Hide the start modal
+    document.getElementById('startModal').style.display = 'none';
+
+    if (isFirst) {
+      // Show the host the "Start Game" modal
+      document.getElementById('startGamePopup').classList.remove('hidden');
+    } else {
+      // Show the non-host the waiting modal
+      document.getElementById('waitingForHostModal').classList.remove('hidden');
+    }
+
     document.getElementById('playerNameInput').value = playerName || '';
     const durationInput = document.getElementById('gameDurationInput');
     durationInput.value = data.duration || 60;
     durationInput.disabled = !isFirst || durationSet;
     durationInput.parentElement.style.opacity = (!isFirst || durationSet) ? '0.5' : '1';
     durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
+  }
+
+  if (data.type === 'name_taken') {
+    alert('This name is already taken. Please choose another one.');
+    document.getElementById('startModal').style.display = 'flex';
+    return;
   }
 
   // Room is full (4 players)
@@ -207,7 +234,11 @@ ws.onmessage = (event) => {
       }
     } else {
       if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
-        startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        if (!isGameReady) {
+          showCountdownThenStart(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        } else {
+          startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum || 0);
+        }
       }
     }
   }
@@ -287,7 +318,7 @@ function gameLoop() {
   if (norm < 0.1) { dx = 0; dy = 0; }
 
   // Send movement to server
-  if (ws.readyState === 1) {
+  if (isGameReady && ws.readyState === 1) {
     ws.send(JSON.stringify({
       type: 'move',
       id: playerId,
@@ -532,3 +563,32 @@ document.getElementById('howToPlayBtn').addEventListener('click', () => {
 document.getElementById('closeHowToPlayBtn').addEventListener('click', () => {
   document.getElementById('howToPlayModal').classList.add('hidden');
 });
+
+// 3-2-1 GO
+let countdownAlreadyRunning = false;
+function showCountdownThenStart(duration, startedAt, pauseAccum) {
+  if (countdownAlreadyRunning) return;
+  countdownAlreadyRunning = true;
+
+  const countdownEl = document.getElementById('countdownDisplay');
+  const steps = ['3', '2', '1', 'GO!'];
+  let i = 0;
+
+  isGameReady = false;
+
+  countdownEl.classList.remove('hidden');
+  countdownEl.textContent = steps[i];
+
+  const interval = setInterval(() => {
+    i++;
+    if (i >= steps.length) {
+      clearInterval(interval);
+      countdownEl.classList.add('hidden');
+      isGameReady = true;
+      countdownAlreadyRunning = false;
+      startCountdownTimer(duration, startedAt, pauseAccum);
+    } else {
+      countdownEl.textContent = steps[i];
+    }
+  }, 1000);
+}
