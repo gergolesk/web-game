@@ -30,6 +30,8 @@ let pausedBy = null;
 let pauseAccum = 0;
 let pauseStartedAt = null;
 
+
+
 // --- GAME INITIALIZATION ---
 gameConfig.duration = null;     // Game duration in seconds
 gameConfig.startTime = null;    // Game start timestamp (Date.now())
@@ -108,8 +110,22 @@ wss.on('connection', (ws) => {
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
 
+
     // --- Player asks: can I join? ---
     if (data.type === 'can_join') {
+
+      if (!ws.playerId && gameConfig.gameStarted) {
+        ws.send(JSON.stringify({
+          type: 'observer_mode',
+          duration: gameConfig.duration,
+          startTime: gameConfig.startTime,
+          pauseAccum: pauseAccum,
+          players: Object.values(players),
+          points: points
+        }));
+        return;
+      }
+
       const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));

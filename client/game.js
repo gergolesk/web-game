@@ -14,6 +14,7 @@ let lastReceivedPlayers = [];
 let hasJoined = false;
 
 let isGameReady = false;
+let isObserver = false;
 
 // Default client-side config (may be overridden by server)
 let gameConfig = {
@@ -72,6 +73,38 @@ ws.onmessage = (event) => {
   if (data.type === 'game_config') {
     gameConfig = data.config;
     return;
+  }
+
+  if (data.type === 'observer_mode') {
+    isObserver = true;
+    // Show that the player is in spectator mode
+    document.getElementById('startModal')?.classList.add('hidden');
+    document.getElementById('waitingForHostModal')?.classList.add('hidden');
+
+    const el = document.createElement('div');
+    el.id = 'observerNotice';
+    el.style.position = 'absolute';
+    el.style.top = '20px';
+    el.style.left = '30%';
+    el.style.transform = 'translateX(-50%)';
+    el.style.color = 'yellow';
+    el.style.fontSize = '24px';
+    el.style.background = 'rgba(0,0,0,0.6)';
+    el.style.padding = '10px 20px';
+    el.style.borderRadius = '8px';
+    el.textContent = 'Game in progress – watching mode 👀';
+    document.body.appendChild(el);
+
+    // Отрисовываем игру (игроков, монеты, таймер)
+    startCountdownTimer(data.duration, data.startTime, data.pauseAccum || 0);
+
+    // Вручную запускаем gameLoop (иначе не будет отрисовки)
+    gameLoop();
+
+    // Рисуем игроков, очки и т.п.
+    lastReceivedPlayers = data.players;
+    points = data.points || [];
+    // Тут можно вручную вызвать рендеринг if needed
   }
 
   // Show modal waiting for players to join, controls game duration selection
@@ -281,6 +314,11 @@ function getDirectionAngle(dx, dy) {
  * Updates the position and rotation of the player's Pac-Man element.
  */
 function updatePlayer() {
+  if (isObserver) {
+    player.style.display = 'none';
+    return;
+  }
+
   player.style.left = pos.x + 'px';
   player.style.top = pos.y + 'px';
   player.style.transform = `rotate(${lastAngle}deg)`;
