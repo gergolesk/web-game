@@ -299,7 +299,7 @@ wss.on('connection', (ws) => {
       pauseAccum = 0; pauseStartedAt = null; gamePaused = false; pausedBy = null;
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
-        gameConfig.startTime = Date.now();
+        gameConfig.startTime = Date.now() + 4000;
         gameConfig.gameStarted = true;
         generatePoints();
         wss.clients.forEach(client => {
