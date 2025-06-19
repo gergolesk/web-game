@@ -272,6 +272,14 @@ body {
 .modal-content button:active {
   transform: scale(0.98);
 }
+.modal-content button:disabled {
+  background-color: #ccc;   /* Серый фон */
+  color: #888;              /* Серый текст */
+  cursor: not-allowed;      /* Курсор запрета */
+  box-shadow: none;         /* Нет тени при нажатии */
+  opacity: 1;               /* Чтобы не было прозрачности, если по умолчанию есть */
+  transform: none;          /* Чтобы не было "продавливания" */
+}
 
 .countdown {
   position: absolute;

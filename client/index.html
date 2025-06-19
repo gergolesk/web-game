@@ -58,6 +58,8 @@
           <option value="30">30</option>
           <option value="60" selected>60</option>
           <option value="90">90</option>
+          <option value="90">120</option>
+          <option value="90">180</option>
         </select>
       </label>
       <button id="howToPlayBtn">ℹ️ How to play</button>
@@ -77,9 +79,9 @@
   <!-- Modal for host to start the game -->
   <div id="startGamePopup" class="modal-overlay hidden">
     <div class="modal-content">
-      <p id="connectedPlayersInfo">Another player has joined!</p>
-      <button id="startGameBtnByHost">Start Game</button>
-      <p class="note">Or wait for more players to join...</p>
+      <p id="connectedPlayersInfo">Waiting for other players to join...</p>
+      <button id="startGameBtnByHost" disabled>Start Game</button>
+      <p class="note">Share the link with your friends and wait 🕒</p>
     </div>
   </div>
 

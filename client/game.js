@@ -50,6 +50,7 @@ ws.onmessage = (event) => {
     const popup = document.getElementById('startGamePopup');
     const info = document.getElementById('connectedPlayersInfo');
     const btn = document.getElementById('startGameBtnByHost');
+    btn.disabled = false;
     info.textContent = `There are ${data.count} players online. Start now or wait for more?`;
     popup.classList.remove('hidden');
     btn.onclick = () => {
@@ -80,6 +81,8 @@ ws.onmessage = (event) => {
 
     // Hide the start modal
     document.getElementById('startModal').style.display = 'none';
+    //Disable button
+    document.getElementById('startGameBtnByHost').disabled = true;
 
     if (isFirst) {
       // Show the host the "Start Game" modal
@@ -512,6 +515,7 @@ function startCountdownTimer(duration, startedAt, pauseAccum) {
  * Shows end-of-game modal with player scores
  */
 function showGameResults(players) {
+  isGameReady = false;
   const modal = document.getElementById('resultModal');
   const list = document.getElementById('resultList');
   modal.classList.remove('hidden');
@@ -528,7 +532,8 @@ function showGameResults(players) {
 function sendReadyToRestart() {
   const modal = document.getElementById('resultModal');
   if (modal) modal.classList.add('hidden');
-  ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+  //ws.send(JSON.stringify({ type: 'ready_to_restart' }));
+  location.reload();
 }
 
 // --- PAUSE/RESUME CONTROLS ---
