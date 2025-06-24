@@ -396,9 +396,13 @@ wss.on('connection', (ws) => {
    */
   ws.on('close', () => {
     if (playerId && players[playerId]) {
+      const leaverName = players[playerId].name || 'Unknown player';
       if (typeof players[playerId].corner === 'number')
         cornerOccupants[players[playerId].corner] = null;
       delete players[playerId];
+
+      broadcastPlayerQuit(leaverName);
+
       broadcastGameState();
     }
     // Reset game state if all players left
