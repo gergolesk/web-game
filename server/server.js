@@ -30,6 +30,8 @@ let pausedBy = null;
 let pauseAccum = 0;
 let pauseStartedAt = null;
 
+
+
 // --- GAME INITIALIZATION ---
 gameConfig.duration = null;     // Game duration in seconds
 gameConfig.startTime = null;    // Game start timestamp (Date.now())
@@ -100,6 +102,17 @@ function generatePoints() {
   if (shuffled[2]) shuffled[2].type = "trap";
 }
 
+/**
+ * Broadcasts the "player_quit" event to all clients.
+ */
+function broadcastPlayerQuit(name) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'player_quit', name }));
+    }
+  });
+}
+
 // --- WEBSOCKET HANDLERS ---
 wss.on('connection', (ws) => {
   let playerId = null;
@@ -108,8 +121,38 @@ wss.on('connection', (ws) => {
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
 
+    if(data.type === "player_quit" && playerId && players[playerId]) {
+      const leaverName = players[playerId].name || 'Unknown player';
+
+      if(typeof players[playerId].corner === 'number') {
+        cornerOccupants[players[playerId].corner] = null;
+      }
+
+      delete players[playerId];
+
+      broadcastPlayerQuit(leaverName);
+
+      broadcastGameState();
+
+
+      return;
+    }
+
     // --- Player asks: can I join? ---
     if (data.type === 'can_join') {
+
+      if (!ws.playerId && gameConfig.gameStarted) {
+        ws.send(JSON.stringify({
+          type: 'observer_mode',
+          duration: gameConfig.duration,
+          startTime: gameConfig.startTime,
+          pauseAccum: pauseAccum,
+          players: Object.values(players),
+          points: points
+        }));
+        return;
+      }
+
       const freeCorner = cornerOccupants.findIndex(id => id === null);
       if (freeCorner === -1) {
         ws.send(JSON.stringify({ type: 'max_players' }));
@@ -299,7 +342,7 @@ wss.on('connection', (ws) => {
       pauseAccum = 0; pauseStartedAt = null; gamePaused = false; pausedBy = null;
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
       if (!gameConfig.gameStarted && connectedPlayersCount >= 2) {
-        gameConfig.startTime = Date.now();
+        gameConfig.startTime = Date.now() + 4000;
         gameConfig.gameStarted = true;
         generatePoints();
         wss.clients.forEach(client => {
@@ -353,9 +396,13 @@ wss.on('connection', (ws) => {
    */
   ws.on('close', () => {
     if (playerId && players[playerId]) {
+      const leaverName = players[playerId].name || 'Unknown player';
       if (typeof players[playerId].corner === 'number')
         cornerOccupants[players[playerId].corner] = null;
       delete players[playerId];
+
+      broadcastPlayerQuit(leaverName);
+
       broadcastGameState();
     }
     // Reset game state if all players left
