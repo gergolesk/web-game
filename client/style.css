@@ -99,7 +99,8 @@ body {
 }
 
 /* Pause button */
-#pauseBtn {
+#pauseBtn,
+#quitBtn {
   width: 100%;
   padding: 14px 0;
   font-size: 19px;
@@ -112,8 +113,13 @@ body {
   transition: background 0.2s;
   margin: 0 0 10px 0;
 }
-#pauseBtn:hover {
+#pauseBtn:hover,
+#quitBtn:hover {
   background: #333;
+}
+
+#quitBtn span {
+ filter: brightness(2) saturate(6) hue-rotate(479deg);
 }
 
 /* Joystick in sidebar */

@@ -102,6 +102,17 @@ function generatePoints() {
   if (shuffled[2]) shuffled[2].type = "trap";
 }
 
+/**
+ * Broadcasts the "player_quit" event to all clients.
+ */
+function broadcastPlayerQuit(name) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'player_quit', name }));
+    }
+  });
+}
+
 // --- WEBSOCKET HANDLERS ---
 wss.on('connection', (ws) => {
   let playerId = null;
@@ -110,6 +121,22 @@ wss.on('connection', (ws) => {
   ws.on('message', (msg) => {
     const data = JSON.parse(msg);
 
+    if(data.type === "player_quit" && playerId && players[playerId]) {
+      const leaverName = players[playerId].name || 'Unknown player';
+
+      if(typeof players[playerId].corner === 'number') {
+        cornerOccupants[players[playerId].corner] = null;
+      }
+
+      delete players[playerId];
+
+      broadcastPlayerQuit(leaverName);
+
+      broadcastGameState();
+
+
+      return;
+    }
 
     // --- Player asks: can I join? ---
     if (data.type === 'can_join') {
