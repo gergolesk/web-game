@@ -200,7 +200,8 @@ wss.on('connection', (ws) => {
         corner: myCorner,
         score: 0,
         slowUntil: 0,
-        readyToRestart: false
+        readyToRestart: false,
+        lastMoveAt: Date.now()
       };
 
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
@@ -230,36 +231,56 @@ wss.on('connection', (ws) => {
 
     // --- Movement ---
     if (data.type === 'move' && playerId && players[playerId]) {
-      if (!gameConfig.gameStarted || gamePaused) return;
-      let speed = 4;
-      // Apply slow debuff if active
-      if (players[playerId].slowUntil && players[playerId].slowUntil > Date.now()) speed = speed / 2;
-      let dx = typeof data.dx === 'number' ? data.dx : 0;
-      let dy = typeof data.dy === 'number' ? data.dy : 0;
-      let norm = Math.sqrt(dx * dx + dy * dy);
-      let angle = typeof data.angle === 'number' ? data.angle : players[playerId].angle;
-      let oldX = players[playerId].x;
-      let oldY = players[playerId].y;
-      let newX = oldX, newY = oldY;
+        if (!gameConfig.gameStarted || gamePaused) return;
 
-      if (norm > 0) {
-        newX = oldX + speed * dx / norm;
-        newY = oldY + speed * dy / norm;
-        newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_RADIUS*2 ));
-        newY = Math.max(0, Math.min(newY, FIELD_HEIGHT - PACMAN_RADIUS*2 ));
-        if (!willCollide(playerId, newX, newY)) {
-          players[playerId].x = newX;
-          players[playerId].y = newY;
-          players[playerId].angle = angle;
-        } else {
-          players[playerId].angle = angle;
+        const now = Date.now();
+        // Сколько секунд прошло с прошлого шага игрока
+        const lastMoveAt = players[playerId].lastMoveAt || now;
+        let dt = (now - lastMoveAt) / 1000; // в секундах
+
+        // Ограничим dt на случай, если клиент "пропал" надолго (например, свернул вкладку)
+        if (dt > 0.2) dt = 0.2; // максимум 200мс за один шаг
+
+        players[playerId].lastMoveAt = now;
+
+        // Базовая скорость (4 пикселя за 50мс в старой логике == 80 пикселей/сек)
+        let speedPerSecond = 200;
+        if (players[playerId].slowUntil && players[playerId].slowUntil > now) {
+            speedPerSecond = 100; // замедление в 2 раза
         }
-      } else {
-        players[playerId].angle = angle;
-      }
-      players[playerId].mouthOpen = !!data.mouthOpen;
-      broadcastGameState();
+
+        // Сколько реально пройти пикселей за dt
+        const distance = speedPerSecond * dt;
+
+        // Нормализуем направление
+        let dx = typeof data.dx === 'number' ? data.dx : 0;
+        let dy = typeof data.dy === 'number' ? data.dy : 0;
+        let norm = Math.sqrt(dx * dx + dy * dy);
+        let angle = typeof data.angle === 'number' ? data.angle : players[playerId].angle;
+        let oldX = players[playerId].x;
+        let oldY = players[playerId].y;
+        let newX = oldX, newY = oldY;
+
+        if (norm > 0.01) {
+            // Нормализуем вектор, находим шаг движения
+            newX = oldX + distance * dx / norm;
+            newY = oldY + distance * dy / norm;
+            newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_RADIUS*2 ));
+            newY = Math.max(0, Math.min(newY, FIELD_HEIGHT - PACMAN_RADIUS*2 ));
+            if (!willCollide(playerId, newX, newY)) {
+                players[playerId].x = newX;
+                players[playerId].y = newY;
+                players[playerId].angle = angle;
+            } else {
+                players[playerId].angle = angle;
+            }
+        } else {
+            players[playerId].angle = angle;
+        }
+        players[playerId].mouthOpen = !!data.mouthOpen;
+        broadcastGameState();
     }
+
 
     // --- Player collected a coin/point ---
     if (data.type === 'collect_point' && playerId && players[playerId]) {

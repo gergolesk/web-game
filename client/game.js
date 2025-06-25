@@ -381,6 +381,7 @@ function animateMouth() {
  * Main render/input/sync loop. Handles all local movement and collision.
  */
 function gameLoop() {
+    /*
     let dx = virtualDir.dx || 0, dy = virtualDir.dy || 0;
     if (keys['arrowup'] || keys['w']) dy -= 1;
     if (keys['arrowdown'] || keys['s']) dy += 1;
@@ -390,6 +391,9 @@ function gameLoop() {
     if (norm < 0.1) {
         dx = 0;
         dy = 0;
+    } else {
+        dx /= norm;
+        dy /= norm;
     }
 
     // Send movement to server
@@ -397,13 +401,13 @@ function gameLoop() {
         ws.send(JSON.stringify({
             type: 'move',
             id: playerId,
-            dx: norm > 0 ? dx / norm : 0,
-            dy: norm > 0 ? dy / norm : 0,
+            dx: dx,
+            dy: dy,
             angle: getDirectionAngle(dx, dy),
             mouthOpen: mouthOpen
         }));
     }
-
+*/
     // Collision detection with coins (client-side, optimistic)
     points.forEach(pt => {
         const dX = pt.x - (pos.x + gameConfig.PACMAN_RADIUS);
@@ -422,6 +426,31 @@ function gameLoop() {
 
 updatePlayer();
 gameLoop();
+setInterval(sendMove, 50);
+
+function sendMove() {
+    let dx = virtualDir.dx || 0, dy = virtualDir.dy || 0;
+    if (keys['arrowup'] || keys['w']) dy -= 1;
+    if (keys['arrowdown'] || keys['s']) dy += 1;
+    if (keys['arrowleft'] || keys['a']) dx -= 1;
+    if (keys['arrowright'] || keys['d']) dx += 1;
+    const norm = Math.sqrt(dx * dx + dy * dy);
+    if (norm < 0.1) {
+        dx = 0; dy = 0;
+    } else {
+        dx /= norm; dy /= norm;
+    }
+    if (isGameReady && ws.readyState === 1) {
+        ws.send(JSON.stringify({
+            type: 'move',
+            id: playerId,
+            dx: dx,
+            dy: dy,
+            angle: getDirectionAngle(dx, dy),
+            mouthOpen: mouthOpen
+        }));
+    }
+}
 
 // --- VIRTUAL JOYSTICK HANDLING ---
 // Handles touch and mouse drag joystick input for mobile and desktop
