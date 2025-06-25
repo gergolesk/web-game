@@ -317,9 +317,13 @@ ws.onmessage = (event) => {
         showToast(`${data.name} left the game`);
     }
 
+    if (data.type === 'game_over') {
+        isGameReady = false;
+        showGameResults(data.players || []);
+    }
+
     lastReceivedPlayers = data.players;
-}
-;
+};
 
 // --- KEYBOARD CONTROLS ---
 // Track pressed keys for movement input
@@ -636,10 +640,13 @@ function showGameResults(players) {
  * Hide result modal and signal readiness to server for new game
  */
 function sendReadyToRestart() {
+    // Прячем окно
     const modal = document.getElementById('resultModal');
     if (modal) modal.classList.add('hidden');
-    //ws.send(JSON.stringify({ type: 'ready_to_restart' }));
-    location.reload();
+    // Перезагружаем страницу через короткую задержку
+    setTimeout(() => {
+        location.reload();
+    }, 200);
 }
 
 // --- PAUSE/RESUME CONTROLS ---

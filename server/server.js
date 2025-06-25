@@ -30,7 +30,8 @@ let pausedBy = null;
 let pauseAccum = 0;
 let pauseStartedAt = null;
 
-
+//Global timer for game end
+let gameEndTimeout = null;
 
 // --- GAME INITIALIZATION ---
 gameConfig.duration = null;     // Game duration in seconds
@@ -129,12 +130,8 @@ wss.on('connection', (ws) => {
       }
 
       delete players[playerId];
-
       broadcastPlayerQuit(leaverName);
-
       broadcastGameState();
-
-
       return;
     }
 
@@ -334,6 +331,7 @@ wss.on('connection', (ws) => {
         });
         broadcastGameState();
       }
+      if (gameEndTimeout) clearTimeout(gameEndTimeout);
       return;
     }
 
@@ -345,6 +343,20 @@ wss.on('connection', (ws) => {
         gameConfig.startTime = Date.now() + 4000;
         gameConfig.gameStarted = true;
         generatePoints();
+
+        if (gameEndTimeout) clearTimeout(gameEndTimeout);
+        if (typeof gameConfig.duration === "number") {
+          gameEndTimeout = setTimeout(() => {
+            
+            wss.clients.forEach(client => {
+              if (client.readyState === WebSocket.OPEN)
+                client.send(JSON.stringify({ type: 'game_over', players: Object.values(players) }));
+            });
+            fullResetGameState();
+            broadcastGameState();
+          }, gameConfig.duration * 1000 + 4000); // +4000 на время отсчёта "3-2-1-GO"
+        }
+
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({
@@ -418,6 +430,20 @@ wss.on('connection', (ws) => {
     }
   });
 });
+
+function fullResetGameState() {
+    players = {};
+    cornerOccupants = [null, null, null, null];
+    gameConfig.duration = null;
+    gameConfig.startTime = null;
+    gameConfig.gameStarted = false;
+    pauseAccum = 0;
+    pauseStartedAt = null;
+    gamePaused = false;
+    pausedBy = null;
+    if (gameEndTimeout) clearTimeout(gameEndTimeout);
+    generatePoints();
+}
 
 // Initial game setup at server start
 generatePoints();
