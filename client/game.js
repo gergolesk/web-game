@@ -39,6 +39,9 @@ const playersListDiv = document.getElementById('players-list');
 const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
 
+// Store states for smooth interpolation of all other Pacmans
+const opponentStates = {}; // ключ - id игрока
+
 // --- WEBSOCKET EVENT HANDLERS ---
 // Handles all incoming server messages and game events
 ws.onopen = () => ws.send(JSON.stringify({type: 'can_join'}));
@@ -95,16 +98,12 @@ ws.onmessage = (event) => {
         el.textContent = 'Game in progress – watching mode 👀';
         document.body.appendChild(el);
 
-        // Отрисовываем игру (игроков, монеты, таймер)
+        // Draw the game (players, coins, timer)
         startCountdownTimer(data.duration, data.startTime, data.pauseAccum || 0);
 
-        // Вручную запускаем gameLoop (иначе не будет отрисовки)
-        gameLoop();
-
-        // Рисуем игроков, очки и т.п.
+        // Draw players, points, etc.
         lastReceivedPlayers = data.players;
         points = data.points || [];
-        // Тут можно вручную вызвать рендеринг if needed
     }
 
     // Show modal waiting for players to join, controls game duration selection
@@ -185,30 +184,42 @@ ws.onmessage = (event) => {
         }
 
         // Render all other players
-        otherPlayersDiv.innerHTML = '';
+        
+        //otherPlayersDiv.innerHTML = '';
         data.players.forEach(p => {
             if (p.id === playerId) return;
-            const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            el.setAttribute('width', 40);
-            el.setAttribute('height', 40);
-            el.style.position = 'absolute';
-            el.style.left = p.x + 'px';
-            el.style.top = p.y + 'px';
-            el.style.transform = `rotate(${p.angle}deg)`;
-            el.style.zIndex = 1;
-            const mouthPoints = p.mouthOpen ? "20,20 40,10 40,30" : "20,20 40,18 40,22";
-            el.innerHTML = `
-        <defs>
-          <mask id="m-${p.id}">
-            <circle cx="20" cy="20" r="20" fill="white"/>
-            <polygon points="${mouthPoints}" fill="black"/>
-          </mask>
-        </defs>
-        <circle cx="20" cy="20" r="20" fill="${p.color || 'yellow'}" mask="url(#m-${p.id})" />
-      `;
-            otherPlayersDiv.appendChild(el);
+
+            // If we see it for the first time, initialize it
+            if (!opponentStates[p.id]) {
+                opponentStates[p.id] = {
+                    renderX: p.x,
+                    renderY: p.y,
+                    renderAngle: p.angle || 0,
+                    serverX: p.x,
+                    serverY: p.y,
+                    serverAngle: p.angle || 0,
+                    color: p.color || 'yellow',
+                    name: p.name || 'Player',
+                    mouthPhase: Math.random(), // чтобы рот "жевал" не синхронно
+                    mouthSpeed: 3.5,
+                };
+            }
+            // Always update server values ​​(target for interpolation)
+            opponentStates[p.id].serverX = p.x;
+            opponentStates[p.id].serverY = p.y;
+            opponentStates[p.id].serverAngle = p.angle || 0;
+            opponentStates[p.id].color = p.color || 'yellow';
+            opponentStates[p.id].name = p.name || 'Player';
+            opponentStates[p.id].mouthOpen = !!p.mouthOpen; // for compatibility, but not used
         });
 
+        // DELETE extra Pacmans if someone left
+        for (const id in opponentStates) {
+            if (!data.players.some(p => p.id === id)) {
+                delete opponentStates[id];
+            }
+        }
+        
         // Render and update all game points/coins
         points = data.points || [];
         const pointsDiv = document.getElementById('points');
@@ -274,14 +285,14 @@ ws.onmessage = (event) => {
             if (typeof data.gameDuration === 'number' && typeof data.gameStartedAt === 'number') {
                 if (!isGameReady) {
                     if (isObserver) {
-                        // ▸ зрителю отсчёт не нужен — сразу показываем оставшееся время
+                        // the observer doesn't need the countdown — we immediately show
                         startCountdownTimer(
                             data.gameDuration,
                             data.gameStartedAt,
                             data.pauseAccum || 0
                         );
                     } else {
-                        // ▸ игроку показываем «3-2-1-GO»
+                        // we show "3-2-1-GO" to the player
                         showCountdownThenStart(
                             data.gameDuration,
                             data.gameStartedAt,
@@ -289,7 +300,7 @@ ws.onmessage = (event) => {
                         );
                     }
                 } else {
-                    // ▸ игра уже идёт — просто обновляем таймер всем
+                    // the game is already in progress - just update the timer for everyone
                     startCountdownTimer(
                         data.gameDuration,
                         data.gameStartedAt,
@@ -336,7 +347,7 @@ addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
  * Returns angle in degrees based on movement vector.
  */
 function getDirectionAngle(dx, dy) {
-    if (dx === 0 && dy === 0) return lastAngle;
+    //if (dx === 0 && dy === 0) return lastAngle;
     return Math.atan2(dy, dx) * 180 / Math.PI;
 }
 
@@ -354,84 +365,42 @@ function updatePlayer() {
     player.style.transform = `rotate(${lastAngle}deg)`;
 }
 
-//let mouthOpen = true, mouthTimer = 0, lastX = pos.x, lastY = pos.y;
 
-// --- Интерполяция позиции и плавная анимация рта Pac-Man ---
+// --- Interpolation of position and smooth animation of Pac-Man's mouth ---
 
-// Сохраняем целевую позицию и угол от сервера, и отрисованную (плавно догоняемую)
+// Save the target position and angle from the server, and the rendered one (smoothly caught up)
 let serverPos = { x: 100, y: 100 };
 let renderPos = { x: 100, y: 100 };
 let serverAngle = 0;
 let renderAngle = 0;
 
-// Мягкая анимация рта через phase
-let mouthPhase = 0;   // фаза (0...1), шаг за 1 цикл "открыт-закрыт"
-let mouthSpeed = 3.5; // число "открыть-закрыть" в секунду
+// Soft mouth animation via phase
+let mouthPhase = 0;   // phase (0...1), step per 1 "open-close" cycle
+let mouthSpeed = 3.5; // number of "open-close" per second
 
-// Для коллизий используем серверную позицию (это важно для сбора монет)
-let mouthOpen = true; // этот флаг нужен только для отправки на сервер
+// For collisions we use the server position (this is important for collecting coins)
+let mouthOpen = true; // this flag is only needed for sending to the server
 
 /**
  * Animates Pac-Man's mouth open/close while moving.
  */
-function animateMouth() {
-    const mouth = document.getElementById('mouth');
-    if (!mouth) return;
-    const moved = (pos.x !== lastX || pos.y !== lastY);
-    lastX = pos.x;
-    lastY = pos.y;
-    if (moved) {
-        mouthTimer++;
-        if (mouthTimer >= 5) {
-            mouthOpen = !mouthOpen;
-            mouthTimer = 0;
-            mouth.setAttribute("points", mouthOpen ? "20,20 40,10 40,30" : "20,20 40,18 40,22");
-        }
-    } else {
-        mouth.setAttribute("points", "20,20 40,18 40,22");
-    }
-}
 
-// --- MAIN GAME LOOP ---
-/**
- * Main render/input/sync loop. Handles all local movement and collision.
- */
-function gameLoop() {
-
-    // Collision detection with coins (client-side, optimistic)
-    points.forEach(pt => {
-        const dX = pt.x - (pos.x + gameConfig.PACMAN_RADIUS);
-        const dY = pt.y - (pos.y + gameConfig.PACMAN_RADIUS);
-        const dist = Math.sqrt(dX * dX + dY * dY);
-        if (dist < gameConfig.PACMAN_RADIUS + gameConfig.POINT_RADIUS) {
-            triggerCoinCollectEffect(pt.x, pt.y);
-            ws.send(JSON.stringify({type: 'collect_point', pointId: pt.id}));
-        }
-    });
-
-    updatePlayer();
-    animateMouth();
-    requestAnimationFrame(gameLoop);
-}
-
-//updatePlayer();
-//gameLoop();
 setInterval(sendMove, 50);
 renderLoop();
 
-// --- Плавный рендер и анимация рта ---
+// --- Smooth mouth rendering and animation ---
 function lerp(a, b, t) {
     return a + (b - a) * t;
 }
 
 function renderLoop() {
-    // Интерполяция позиции и угла (0.25 – плавно за 4 кадра)
+    // Interpolate position and angle (0.25 - smoothly over 4 frames)
     const interpSpeed = 0.25;
     renderPos.x = lerp(renderPos.x, serverPos.x, interpSpeed);
     renderPos.y = lerp(renderPos.y, serverPos.y, interpSpeed);
     renderAngle = lerp(renderAngle, serverAngle, interpSpeed);
 
-    // Обновляем позицию Pac-Man (отрисованную!)
+    // Update Pac-Man's position (rendered!)
     if (isObserver) {
         player.style.display = 'none';
     } else {
@@ -441,25 +410,25 @@ function renderLoop() {
         player.style.transform = `rotate(${renderAngle}deg)`;
     }
 
-    // Плавная анимация рта через time-based phase
+    // Smooth mouth animation via time-based phase
     const now = performance.now() / 1000;
-    mouthPhase = (now * mouthSpeed) % 1; // всегда 0...1
-    // mouthVal: 0...1...0 (открыт -> закрыт -> открыт)
+    mouthPhase = (now * mouthSpeed) % 1; // always 0...1
+    // mouthVal: 0...1...0 (open -> closed -> open)
     const mouthVal = Math.abs(Math.sin(mouthPhase * Math.PI));
-    // Подбирай числа для красивой анимации раскрытия (open, close)
-    const open = lerp(18, 10, mouthVal);   // верхняя точка
-    const close = lerp(22, 30, mouthVal);  // нижняя точка
+    // Pick numbers for a nice opening animation (open, close)
+    const open = lerp(18, 10, mouthVal);   // top point
+    const close = lerp(22, 30, mouthVal);  // bottom point
 
-    // mouthOpen – true, если Pacman сейчас на "максимальном" открытии (для отправки на сервер)
+    // mouthOpen – true if Pacman is currently at the "maximum"
     mouthOpen = mouthVal > 0.5;
 
-    // Рисуем рот
+    // Draw the mouth
     const mouth = document.getElementById('mouth');
     if (mouth) {
         mouth.setAttribute("points", `20,20 40,${open} 40,${close}`);
     }
 
-    // Обработка клиентских коллизий с монетами (используем серверную позицию для корректности)
+    // Handle client coin collisions (use server position for correctness)
     points.forEach(pt => {
         const dX = pt.x - (serverPos.x + gameConfig.PACMAN_RADIUS);
         const dY = pt.y - (serverPos.y + gameConfig.PACMAN_RADIUS);
@@ -469,6 +438,47 @@ function renderLoop() {
             ws.send(JSON.stringify({type: 'collect_point', pointId: pt.id}));
         }
     });
+
+    // --- Drawing other Pacmans ---
+    otherPlayersDiv.innerHTML = ''; // clear DIV
+
+    for (const id in opponentStates) {
+        const state = opponentStates[id];
+
+        // Interpolate position and angle (like yourself)
+        const interpSpeed = 0.25;
+        state.renderX = lerp(state.renderX, state.serverX, interpSpeed);
+        state.renderY = lerp(state.renderY, state.serverY, interpSpeed);
+        state.renderAngle = lerp(state.renderAngle, state.serverAngle, interpSpeed);
+
+        // Mouth animation: each Pacman can "chew" at his own pace/phase
+        const now = performance.now() / 1000;
+        state.mouthPhase = (state.mouthPhase + (state.mouthSpeed * (1/60))) % 1; // шаг сдвигаем чуть-чуть каждый кадр
+        const mouthVal = Math.abs(Math.sin((now + id.length*0.22) * Math.PI * state.mouthSpeed));
+        const open = lerp(18, 10, mouthVal);
+        const close = lerp(22, 30, mouthVal);
+
+        // SVG Pacman with dynamic mouth mask
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        el.setAttribute('width', 40);
+        el.setAttribute('height', 40);
+        el.style.position = 'absolute';
+        el.style.left = state.renderX + 'px';
+        el.style.top = state.renderY + 'px';
+        el.style.transform = `rotate(${state.renderAngle}deg)`;
+        el.style.zIndex = 1;
+        el.innerHTML = `
+        <defs>
+            <mask id="m-${id}">
+            <circle cx="20" cy="20" r="20" fill="white"/>
+            <polygon points="20,20 40,${open} 40,${close}" fill="black"/>
+            </mask>
+        </defs>
+        <circle cx="20" cy="20" r="20" fill="${state.color}" mask="url(#m-${id})" />
+        `;
+        otherPlayersDiv.appendChild(el);
+    }
+
 
     requestAnimationFrame(renderLoop);
 }
@@ -485,6 +495,7 @@ function sendMove() {
         dx = 0; dy = 0;
     } else {
         dx /= norm; dy /= norm;
+        lastAngle = getDirectionAngle(dx, dy);
     }
     if (isGameReady && ws.readyState === 1) {
         ws.send(JSON.stringify({
@@ -492,7 +503,7 @@ function sendMove() {
             id: playerId,
             dx: dx,
             dy: dy,
-            angle: getDirectionAngle(dx, dy),
+            angle: lastAngle,
             mouthOpen: mouthOpen
         }));
     }
@@ -715,10 +726,10 @@ function showGameResults(players) {
  * Hide result modal and signal readiness to server for new game
  */
 function sendReadyToRestart() {
-    // Прячем окно
+    // Hide the window
     const modal = document.getElementById('resultModal');
     if (modal) modal.classList.add('hidden');
-    // Перезагружаем страницу через короткую задержку
+    // Reload the page after a short delay
     setTimeout(() => {
         location.reload();
     }, 200);
