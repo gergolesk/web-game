@@ -1,5 +1,8 @@
 // === PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, sound and pause support ===
 
+import { playSound } from "./src/sound.js";
+import { initControls, keys, virtualDir } from './src/control.js';  
+
 // --- GLOBAL CONSTANTS AND VARIABLES ---
 // Main config and runtime variables for client state
 const POINT_RADIUS = 8;
@@ -32,8 +35,6 @@ const ws = new WebSocket('ws://' + window.location.hostname + ':3000');
 // Local movement state and references to DOM elements
 let pos = {x: 100, y: 100};
 let lastAngle = 0;
-const keys = {};
-let virtualDir = {dx: 0, dy: 0};
 const otherPlayersDiv = document.getElementById('other-players');
 const playersListDiv = document.getElementById('players-list');
 const player = document.getElementById('player');
@@ -313,15 +314,20 @@ ws.onmessage = (event) => {
 
     // Handle different coin types (for future extensions)
     if (data.type === 'point_collected') {
-        if (data.pointType === 'negative') {
-            applySlowDebuff(2000);
-            playBadCoinSound();
-        } else if (data.pointType === 'bonus') {
-            playBonusSound();
-        } else if (data.pointType === 'trap') {
-            playTrapSound();
-        } else {
-            playCoinSound();
+        switch (data.pointType) {
+            case 'negative':
+                applySlowDebuff(2000);
+                playSound('badCoinSound');
+                break;
+            case 'bonus':
+                playSound('bonusSound');
+                break;
+            case 'trap':
+                playSound('trapSound');
+                break;
+            default:
+                playSound('coinSound');
+                break;
         }
     }
 
@@ -337,10 +343,6 @@ ws.onmessage = (event) => {
     lastReceivedPlayers = data.players;
 };
 
-// --- KEYBOARD CONTROLS ---
-// Track pressed keys for movement input
-addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
 // --- PLAYER RENDERING & ANIMATION ---
 /**
@@ -350,21 +352,6 @@ function getDirectionAngle(dx, dy) {
     //if (dx === 0 && dy === 0) return lastAngle;
     return Math.atan2(dy, dx) * 180 / Math.PI;
 }
-
-/**
- * Updates the position and rotation of the player's Pac-Man element.
- */
-function updatePlayer() {
-    if (isObserver) {
-        player.style.display = 'none';
-        return;
-    }
-
-    player.style.left = pos.x + 'px';
-    player.style.top = pos.y + 'px';
-    player.style.transform = `rotate(${lastAngle}deg)`;
-}
-
 
 // --- Interpolation of position and smooth animation of Pac-Man's mouth ---
 
@@ -511,10 +498,11 @@ function sendMove() {
 
 // --- VIRTUAL JOYSTICK HANDLING ---
 // Handles touch and mouse drag joystick input for mobile and desktop
-const joystick = document.getElementById('joystick');
-const stick = document.getElementById('stick');
-let joystickCenter = {x: 0, y: 0}, dragging = false;
-let isSlowed = false;
+initControls({
+  joystickEl: document.getElementById('joystick'),
+  stickEl: document.getElementById('stick'),
+  sendMove: sendMove
+});
 
 /**
  * Applies a "slow" debuff (greys out player for duration in ms)
@@ -525,83 +513,6 @@ function applySlowDebuff(duration) {
     setTimeout(() => {
         if (playerEl) playerEl.style.filter = '';
     }, duration);
-}
-
-/**
- * Update movement direction from joystick touch or mouse position.
- */
-function updateJoystickDirection(touchX, touchY) {
-    const rect = joystick.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const dx = touchX - centerX;
-    const dy = touchY - centerY;
-
-    const maxDist = rect.width / 2;
-    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
-    const angle = Math.atan2(dy, dx);
-
-    // Offset relative to the centre
-    const offsetX = Math.cos(angle) * dist;
-    const offsetY = Math.sin(angle) * dist;
-
-    // Centre + offset
-    stick.style.left = '50%';
-    stick.style.top = '50%';
-    stick.style.transform = `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`;
-
-    virtualDir.dx = dx / maxDist;
-    virtualDir.dy = dy / maxDist;
-}
-
-/**
- * Resets joystick to center position (no movement)
- */
-function resetJoystick() {
-    stick.style.left = '50%';
-    stick.style.top = '50%';
-    stick.style.transform = 'translate(-50%, -50%)';
-    virtualDir.dx = 0;
-    virtualDir.dy = 0;
-}
-
-// --- SOUND & COIN FX ---
-// Play different sounds for coin types
-function playCoinSound() {
-    const snd = document.getElementById('coinSound');
-    if (snd) {
-        snd.currentTime = 0;
-        snd.play().catch(() => {
-        });
-    }
-}
-
-function playBadCoinSound() {
-    const snd = document.getElementById('badCoinSound');
-    if (snd) {
-        snd.currentTime = 0;
-        snd.play().catch(() => {
-        });
-    }
-}
-
-function playBonusSound() {
-    const snd = document.getElementById('bonusSound');
-    if (snd) {
-        snd.currentTime = 0;
-        snd.play().catch(() => {
-        });
-    }
-}
-
-function playTrapSound() {
-    const snd = document.getElementById('trapSound');
-    if (snd) {
-        snd.currentTime = 0;
-        snd.play().catch(() => {
-        });
-    }
 }
 
 /**
@@ -628,30 +539,6 @@ function triggerCoinCollectEffect(x, y) {
     }, 10);
     setTimeout(() => sparkle.remove(), 300);
 }
-
-// --- JOYSTICK & MOUSE EVENTS ---
-// Touch and drag events for joystick control
-joystick.addEventListener('touchstart', e => {
-    if (e.touches.length > 0) updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
-}, {passive: false});
-joystick.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if (e.touches.length > 0) updateJoystickDirection(e.touches[0].clientX, e.touches[0].clientY);
-}, {passive: false});
-joystick.addEventListener('touchend', () => resetJoystick(), {passive: false});
-stick.addEventListener('mousedown', e => {
-    dragging = true;
-    updateJoystickDirection(e.clientX, e.clientY);
-});
-window.addEventListener('mousemove', e => {
-    if (dragging) updateJoystickDirection(e.clientX, e.clientY);
-});
-window.addEventListener('mouseup', () => {
-    if (dragging) {
-        dragging = false;
-        resetJoystick();
-    }
-});
 
 // --- START GAME / JOIN HANDLER ---
 /**
@@ -735,13 +622,27 @@ function sendReadyToRestart() {
     }, 200);
 }
 
-// --- PAUSE/RESUME CONTROLS ---
+// --- PAUSE/RESUME/PlayAgain/Leave CONTROLS ---
 // Add event listeners for pause/resume (button or Pause key)
 document.getElementById('pauseBtn').addEventListener('click', () => ws.send(JSON.stringify({type: 'pause_game'})));
 window.addEventListener('keydown', e => {
     if (e.key === 'Pause' || e.code === 'Pause') ws.send(JSON.stringify({type: 'pause_game'}));
 });
 document.getElementById('resumeBtn').addEventListener('click', () => ws.send(JSON.stringify({type: 'unpause_game'})));
+//Play again btn handler
+document.getElementById('playAgainBtn').addEventListener('click', sendReadyToRestart);
+//Quit button handler
+document.getElementById('quitBtn').addEventListener('click', () => {
+    ws.send(
+        JSON.stringify({
+            type: 'player_quit',
+            id: playerId,
+            name: playerName
+        })
+    );
+
+    location.reload();
+});
 
 /**
  * Show pause overlay, display who paused, and show resume only for the initiator
@@ -797,7 +698,9 @@ function showCountdownThenStart(duration, startedAt, pauseAccum) {
         }
     }, 1000);
 }
-
+/*
+    Quit button handler
+*/
 document.getElementById('quitBtn').addEventListener('click', () => {
     ws.send(
         JSON.stringify({
@@ -809,6 +712,10 @@ document.getElementById('quitBtn').addEventListener('click', () => {
 
     location.reload();
 });
+
+/*
+    Toast message handler
+*/
 
 function showToast(text) {
     const box = document.createElement('div');
