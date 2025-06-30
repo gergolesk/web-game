@@ -1,6 +1,6 @@
 // === PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, sound and pause support ===
 
-import { playSound } from "./src/sound.js";
+import { playSound, updateBackgroundMusic } from "./src/sound.js";
 import { initControls, keys, virtualDir } from './src/control.js';  
 
 // --- GLOBAL CONSTANTS AND VARIABLES ---
@@ -71,6 +71,7 @@ ws.onmessage = (event) => {
         document.getElementById('startGamePopup')?.classList.add('hidden');
 
         showCountdownThenStart();
+        updateBackgroundMusic();
     }
 
     // Server sent new game config (field, speed, etc)
@@ -124,6 +125,7 @@ ws.onmessage = (event) => {
             // Show the non-host the waiting modal
             document.getElementById('waitingForHostModal').classList.remove('hidden');
         }
+        updateBackgroundMusic();
 
         document.getElementById('playerNameInput').value = playerName || '';
         const durationInput = document.getElementById('gameDurationInput');
@@ -156,6 +158,7 @@ ws.onmessage = (event) => {
         durationInput.disabled = durationSet;
         durationInput.parentElement.style.opacity = durationSet ? '0.5' : '1';
         durationInput.parentElement.style.display = durationSet ? 'none' : 'block';
+        updateBackgroundMusic();
     }
 
     // Allow first player to choose game duration
@@ -607,6 +610,7 @@ function showGameResults(players) {
         const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
         return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
     }).join('');
+    updateBackgroundMusic();
 }
 
 /**
@@ -652,6 +656,7 @@ function showPauseOverlay(pausedBy, canResume) {
     document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
     const btn = document.getElementById('resumeBtn');
     btn.style.display = canResume ? '' : 'none';
+    updateBackgroundMusic();
 }
 
 /**
@@ -659,14 +664,17 @@ function showPauseOverlay(pausedBy, canResume) {
  */
 function hidePauseOverlay() {
     document.getElementById('pauseOverlay').classList.add('hidden');
+    updateBackgroundMusic();
 }
 
 document.getElementById('howToPlayBtn').addEventListener('click', () => {
     document.getElementById('howToPlayModal').classList.remove('hidden');
+    //updateBackgroundMusic();
 });
 
 document.getElementById('closeHowToPlayBtn').addEventListener('click', () => {
     document.getElementById('howToPlayModal').classList.add('hidden');
+    //updateBackgroundMusic();
 });
 
 // 3-2-1 GO
@@ -742,3 +750,5 @@ function showToast(text) {
         setTimeout(() => box.remove(),300)
     },2500)
 }
+
+
