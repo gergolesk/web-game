@@ -28,6 +28,12 @@ http://localhost:3000
 
 ---
 
+To start both the server and the client at the same time, run:
+
+```bash
+   npm start
+```
+
 ## 🎮 Gameplay Features
 
 * ⏱ **Timer-based rounds** – Players race against the clock.
