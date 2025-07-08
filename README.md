@@ -130,9 +130,8 @@ http://localhost:5000  # or 8000 depending on your tool
 
 ---
 
-## 📸 Screenshots *(optional)*
+## 📸 Screenshots
 
-*Add gameplay screenshots or demo GIFs here.*
 <img src="images/1.jpg" alt="Start window" width="600"/>
 <img src="images/2.jpg" alt="Game process" width="600"/>
 <img src="images/3.jpg" alt="Pause window" width="600"/>
