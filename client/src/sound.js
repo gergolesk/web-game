@@ -4,24 +4,37 @@
 const MUSIC_VOLUME = 0.18;
 const FX_VOLUME = 1.0;
 
+export let isMusicOn = true;
+export let isSoundOn = true;
 
-const standbyMusic = document.getElementById('standbySound');
+// Сделаем экспорт функций для управления состоянием
+export function setMusicOn(val) {
+    isMusicOn = val;
+    updateBackgroundMusic();
+}
+export function setSoundOn(val) {
+    isSoundOn = val;
+}
+
 let currentMusic = null;
 
 export function playSound(sound) {
+    if (!isSoundOn) return;
     const snd = document.getElementById(sound);
     if (snd) {
         snd.volume = FX_VOLUME;
         snd.currentTime = 0;
-        snd.play().catch(() => {
-        });
+        snd.play().catch(() => {});
     }
 }
 
 export function playGameMusic() {
+    if (!isMusicOn) {
+        stopMusic();
+        return;
+    }
     const gameMusic = document.getElementById('gameSound');
     if (!gameMusic) {
-        // Если элемент не найден, можно попробовать delayed retry:
         setTimeout(playGameMusic, 100);
         return;
     }
@@ -36,9 +49,12 @@ export function playGameMusic() {
 }
 
 export function playStandbyMusic() {
+    if (!isMusicOn) {
+        stopMusic();
+        return;
+    }
     const standbyMusic = document.getElementById('standbySound');
     if (!standbyMusic) {
-        // Если элемент не найден, подождём чуть-чуть и повторим:
         setTimeout(playStandbyMusic, 100);
         return;
     }
@@ -60,6 +76,10 @@ export function stopMusic() {
 }
 
 export function updateBackgroundMusic() {
+    if (!isMusicOn) {
+        stopMusic();
+        return;
+    }
     const resultShown = !document.getElementById('resultModal').classList.contains('hidden');
     const startShown = document.getElementById('startModal').style.display === 'flex';
     const waitingShown = !document.getElementById('waitingForHostModal').classList.contains('hidden');

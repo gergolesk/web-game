@@ -62,10 +62,16 @@
           <option value="30">30</option>
           <option value="60" selected>60</option>
           <option value="90">90</option>
-          <option value="90">120</option>
-          <option value="90">180</option>
+          <option value="120">120</option>
+          <option value="180">180</option>
         </select>
       </label>
+
+      <div style="margin: 12px 0;">
+        <button id="toggleMusicBtn" type="button">🎵 Music: ON</button>
+        <button id="toggleSoundBtn" type="button">🔊 Sounds: ON</button>
+      </div>
+
       <button id="howToPlayBtn">ℹ️ How to play</button>
       <button id="startGameBtn">Start</button>
     </div>
@@ -102,6 +108,10 @@
   <div id="pauseOverlay" class="modal-overlay hidden">
     <div class="modal-content">
       <h2>Game Paused</h2>
+      <div style="margin: 12px 0;">
+        <button id="pauseToggleMusicBtn" type="button">🎵 Music: ON</button>
+        <button id="pauseToggleSoundBtn" type="button">🔊 Sounds: ON</button>
+      </div>
       <p id="pauseByText"></p>
       <button id="resumeBtn" style="display:none;">▶ Continue</button>
       <button id="exitGameBtn" style="display:none;">🔚 Exit game</button>

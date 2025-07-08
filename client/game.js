@@ -1,6 +1,6 @@
 // === PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, sound and pause support ===
 
-import { playSound, updateBackgroundMusic } from "./src/sound.js";
+import { isMusicOn, isSoundOn, setMusicOn, setSoundOn, updateBackgroundMusic, playSound } from './src/sound.js';
 import { initControls, keys, virtualDir } from './src/control.js';  
 
 // --- GLOBAL CONSTANTS AND VARIABLES ---
@@ -19,8 +19,8 @@ let hasJoined = false;
 let isGameReady = false;
 let isObserver = false;
 
-let isHost = false;           // Определять, хост ли это
-let pausedByName = null;      // Имя игрока, поставившего на паузу
+let isHost = false;           // Determine if it is a host
+let pausedByName = null;      // The name of the player who paused the game
 
 // Default client-side config (may be overridden by server)
 let gameConfig = {
@@ -44,7 +44,7 @@ const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
 
 // Store states for smooth interpolation of all other Pacmans
-const opponentStates = {}; // ключ - id игрока
+const opponentStates = {}; // key - player id
 
 // --- WEBSOCKET EVENT HANDLERS ---
 // Handles all incoming server messages and game events
@@ -371,6 +371,51 @@ ws.onmessage = (event) => {
 
     lastReceivedPlayers = data.players;
 };
+
+// --- MUTE/UNMUTE
+
+// --- Music/Sound toggle buttons: START MODAL ---
+const toggleMusicBtn = document.getElementById('toggleMusicBtn');
+const toggleSoundBtn = document.getElementById('toggleSoundBtn');
+
+// --- Music/Sound toggle buttons: PAUSE MODAL ---
+const pauseToggleMusicBtn = document.getElementById('pauseToggleMusicBtn');
+const pauseToggleSoundBtn = document.getElementById('pauseToggleSoundBtn');
+
+// Update button text by state
+function updateMusicBtns() {
+    const musicText = isMusicOn ? "🎵 Music: ON " : "🚫 Music: OFF";
+    if (toggleMusicBtn) toggleMusicBtn.textContent = musicText;
+    if (pauseToggleMusicBtn) pauseToggleMusicBtn.textContent = musicText;
+}
+function updateSoundBtns() {
+    const soundText = isSoundOn ? "🔊 Sounds: ON " : "🔇 Sounds: OFF";
+    if (toggleSoundBtn) toggleSoundBtn.textContent = soundText;
+    if (pauseToggleSoundBtn) pauseToggleSoundBtn.textContent = soundText;
+}
+
+// Click handling - both pairs of buttons duplicate the state
+if (toggleMusicBtn) toggleMusicBtn.onclick = function() {
+    setMusicOn(!isMusicOn);
+    updateMusicBtns();
+};
+if (pauseToggleMusicBtn) pauseToggleMusicBtn.onclick = function() {
+    setMusicOn(!isMusicOn);
+    updateMusicBtns();
+};
+
+if (toggleSoundBtn) toggleSoundBtn.onclick = function() {
+    setSoundOn(!isSoundOn);
+    updateSoundBtns();
+};
+if (pauseToggleSoundBtn) pauseToggleSoundBtn.onclick = function() {
+    setSoundOn(!isSoundOn);
+    updateSoundBtns();
+};
+
+// Initializing button text on boot
+updateMusicBtns();
+updateSoundBtns();
 
 
 // --- PLAYER RENDERING & ANIMATION ---
@@ -729,7 +774,6 @@ document.getElementById('exitGameBtn').addEventListener('click', handleQuitWithU
 
 document.getElementById('stopGameBtn').addEventListener('click', () => {
     ws.send(JSON.stringify({ type: 'stop_game_by_host' }));
-    // location.reload() тут делать не нужно — сервер пришлёт событие game_over и сам всё завершит
 });
 
 document.getElementById('howToPlayBtn').addEventListener('click', () => {
@@ -771,6 +815,7 @@ function showCountdownThenStart(duration, startedAt, pauseAccum) {
         }
     }, 1000);
 }
+
 /*
     Quit button handler
 */
@@ -789,7 +834,6 @@ document.getElementById('quitBtn').addEventListener('click', () => {
 /*
     Toast message handler
 */
-
 function showToast(text) {
     const box = document.createElement('div');
     box.textContent = text;
