@@ -19,6 +19,9 @@ let hasJoined = false;
 let isGameReady = false;
 let isObserver = false;
 
+let isHost = false;           // Определять, хост ли это
+let pausedByName = null;      // Имя игрока, поставившего на паузу
+
 // Default client-side config (may be overridden by server)
 let gameConfig = {
     FIELD_WIDTH: 800,
@@ -52,6 +55,7 @@ ws.onmessage = (event) => {
 
     // Host is offered to start the game
     if (data.type === 'offer_start_game') {
+        isHost = true;
         const popup = document.getElementById('startGamePopup');
         const info = document.getElementById('connectedPlayersInfo');
         const btn = document.getElementById('startGameBtnByHost');
@@ -172,8 +176,14 @@ ws.onmessage = (event) => {
     }
 
     // Game was paused or unpaused
-    if (data.type === 'game_paused') showPauseOverlay(data.pausedBy);
-    if (data.type === 'game_unpaused') hidePauseOverlay();
+    if (data.type === 'game_paused') {
+        pausedByName = data.pausedBy;
+        showPauseOverlay(data.pausedBy);
+    }
+    if (data.type === 'game_unpaused') {
+        pausedByName = null;
+        hidePauseOverlay();
+    }
 
     // Main game state update: all players, points, scores, timer
     if (data.type === 'state') {
@@ -654,8 +664,20 @@ document.getElementById('quitBtn').addEventListener('click', () => {
 function showPauseOverlay(pausedBy, canResume) {
     document.getElementById('pauseOverlay').classList.remove('hidden');
     document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
-    const btn = document.getElementById('resumeBtn');
-    btn.style.display = canResume ? '' : 'none';
+
+    // "Continue" видна только для поставившего паузу
+    const btnResume = document.getElementById('resumeBtn');
+    btnResume.style.display = canResume ? '' : 'none';
+
+    // "Exit game" — только если это мы поставили паузу
+    const btnExit = document.getElementById('exitGameBtn');
+    //btnExit.style.display = (pausedBy === playerName) ? '' : 'none';
+    btnExit.style.display = '';
+
+    // "Stop game" — только для хоста
+    const btnStop = document.getElementById('stopGameBtn');
+    btnStop.style.display = isHost ? '' : 'none';
+
     updateBackgroundMusic();
 }
 
@@ -664,8 +686,35 @@ function showPauseOverlay(pausedBy, canResume) {
  */
 function hidePauseOverlay() {
     document.getElementById('pauseOverlay').classList.add('hidden');
+    document.getElementById('resumeBtn').style.display = 'none';
+    document.getElementById('exitGameBtn').style.display = 'none';
+    document.getElementById('stopGameBtn').style.display = 'none';
     updateBackgroundMusic();
 }
+
+/*
+    Exit game from pause overlay
+*/
+function handleQuitWithUnpause() {
+    // Unpause
+    ws.send(JSON.stringify({ type: 'unpause_game' }));
+
+    // Then quit
+    ws.send(JSON.stringify({
+        type: 'player_quit',
+        id: playerId,
+        name: playerName
+    }));
+
+    location.reload();
+}
+
+document.getElementById('exitGameBtn').addEventListener('click', handleQuitWithUnpause);
+
+document.getElementById('stopGameBtn').addEventListener('click', () => {
+    ws.send(JSON.stringify({ type: 'stop_game_by_host' }));
+    // location.reload() тут делать не нужно — сервер пришлёт событие game_over и сам всё завершит
+});
 
 document.getElementById('howToPlayBtn').addEventListener('click', () => {
     document.getElementById('howToPlayModal').classList.remove('hidden');

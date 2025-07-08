@@ -430,6 +430,15 @@ wss.on('connection', (ws) => {
       }
       return;
     }
+
+    // --- STOP GAME BY HOST ---
+    if (data.type === 'stop_game_by_host' && playerId && players[playerId]) {
+        const isHost = players[playerId].corner === 0;
+        if (isHost && gameConfig.gameStarted) {
+            gameOverFunc();
+        }
+        return;
+    }
   });
 
   /**
