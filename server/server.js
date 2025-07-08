@@ -32,6 +32,8 @@ let pauseStartedAt = null;
 
 //Global timer for game end
 let gameEndTimeout = null;
+let gameTimeLeftMs = null; // time left until the end of the game (during pause)
+let gameEndAt = null;      // timestamp when the game ends (use for calculations)
 
 // --- GAME INITIALIZATION ---
 gameConfig.duration = null;     // Game duration in seconds
@@ -234,25 +236,25 @@ wss.on('connection', (ws) => {
         if (!gameConfig.gameStarted || gamePaused) return;
 
         const now = Date.now();
-        // Сколько секунд прошло с прошлого шага игрока
+        // How many seconds have passed since the player's last step.
         const lastMoveAt = players[playerId].lastMoveAt || now;
         let dt = (now - lastMoveAt) / 1000; // в секундах
 
-        // Ограничим dt на случай, если клиент "пропал" надолго (например, свернул вкладку)
-        if (dt > 0.2) dt = 0.2; // максимум 200мс за один шаг
+        // Let's limit dt in case the client "disappears" for a long time (for example, collapsed the tab)
+        if (dt > 0.2) dt = 0.2; // maximum 200ms per step
 
         players[playerId].lastMoveAt = now;
 
-        // Базовая скорость (4 пикселя за 50мс в старой логике == 80 пикселей/сек)
+        // Basic speed (4 pixels per 50ms in old logic == 80 pixels/sec)
         let speedPerSecond = 200;
         if (players[playerId].slowUntil && players[playerId].slowUntil > now) {
             speedPerSecond = 100; // замедление в 2 раза
         }
 
-        // Сколько реально пройти пикселей за dt
+        // How many pixels can actually be passed in dt
         const distance = speedPerSecond * dt;
 
-        // Нормализуем направление
+        // Normalize the direction
         let dx = typeof data.dx === 'number' ? data.dx : 0;
         let dy = typeof data.dy === 'number' ? data.dy : 0;
         let norm = Math.sqrt(dx * dx + dy * dy);
@@ -262,7 +264,7 @@ wss.on('connection', (ws) => {
         let newX = oldX, newY = oldY;
 
         if (norm > 0.01) {
-            // Нормализуем вектор, находим шаг движения
+            // We normalize the vector, find the step of movement
             newX = oldX + distance * dx / norm;
             newY = oldY + distance * dy / norm;
             newX = Math.max(0, Math.min(newX, FIELD_WIDTH - PACMAN_RADIUS*2 ));
@@ -367,15 +369,9 @@ wss.on('connection', (ws) => {
 
         if (gameEndTimeout) clearTimeout(gameEndTimeout);
         if (typeof gameConfig.duration === "number") {
-          gameEndTimeout = setTimeout(() => {
-            
-            wss.clients.forEach(client => {
-              if (client.readyState === WebSocket.OPEN)
-                client.send(JSON.stringify({ type: 'game_over', players: Object.values(players) }));
-            });
-            fullResetGameState();
-            broadcastGameState();
-          }, gameConfig.duration * 1000 + 4000); // +4000 на время отсчёта "3-2-1-GO"
+          gameTimeLeftMs = gameConfig.duration * 1000 + 4000; // 4000ms for "3-2-1-GO" countdown
+          gameEndAt = Date.now() + gameTimeLeftMs;
+          gameEndTimeout = setTimeout(gameOverFunc, gameTimeLeftMs);
         }
 
         wss.clients.forEach(client => {
@@ -398,6 +394,13 @@ wss.on('connection', (ws) => {
         gamePaused = true;
         pausedBy = players[playerId].name || playerId;
         pauseStartedAt = Date.now();
+        // We save how much time is left until the end of the game, reset the timer
+        if (gameEndAt) {
+          gameTimeLeftMs = gameEndAt - Date.now();
+          if (gameTimeLeftMs < 0) gameTimeLeftMs = 0;
+          clearTimeout(gameEndTimeout);
+          gameEndTimeout = null;
+        }
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: 'game_paused', pausedBy }));
@@ -414,6 +417,11 @@ wss.on('connection', (ws) => {
         gamePaused = false;
         if (pauseStartedAt) pauseAccum += Date.now() - pauseStartedAt;
         pauseStartedAt = null; pausedBy = null;
+        // Set a new timer for the remaining time.
+        if (gameTimeLeftMs !== null && gameTimeLeftMs > 0) {
+          gameEndAt = Date.now() + gameTimeLeftMs;
+          gameEndTimeout = setTimeout(gameOverFunc, gameTimeLeftMs);
+        }
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: 'game_unpaused' }));
@@ -462,8 +470,19 @@ function fullResetGameState() {
     pauseStartedAt = null;
     gamePaused = false;
     pausedBy = null;
+    gameTimeLeftMs = null;
+    gameEndAt = null;
     if (gameEndTimeout) clearTimeout(gameEndTimeout);
     generatePoints();
+}
+
+function gameOverFunc() {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN)
+      client.send(JSON.stringify({ type: 'game_over', players: Object.values(players) }));
+  });
+  fullResetGameState();
+  broadcastGameState();
 }
 
 // Initial game setup at server start
