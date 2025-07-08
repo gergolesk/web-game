@@ -185,12 +185,28 @@ ws.onmessage = (event) => {
         hidePauseOverlay();
     }
 
+    if (data.type === 'host_changed') {
+        isHost = (playerId === data.hostId);
+        showToast(isHost ? "You are the new host!" : "New host assigned");
+    }
+
+
     // Main game state update: all players, points, scores, timer
     if (data.type === 'state') {
+        // Find the minimum corner among players
+        let minCorner = 4, hostId = null;
+        data.players.forEach(p => {
+            if (typeof p.corner === 'number' && p.corner < minCorner) {
+                minCorner = p.corner;
+                hostId = p.id;
+            }
+        });
+        isHost = (playerId === hostId);
+
         // Update your own player position/angle/color
         const me = data.players.find(p => p.id === playerId);
         if (me) {
-            // сохраняем серверную позицию и угол, чтобы плавно их догонять на клиенте
+            // we save the server position and angle to smoothly catch up with them on the client
             serverPos.x = me.x;
             serverPos.y = me.y;
             serverAngle = me.angle || 0;
