@@ -1,7 +1,10 @@
 // === PACMAN client with virtual joystick, keyboard, mouse drag support, animated coins, sound and pause support ===
 
-import { playSound, updateBackgroundMusic } from "./src/sound.js";
-import { initControls, keys, virtualDir } from './src/control.js';  
+import { isMusicOn, isSoundOn, setMusicOn, setSoundOn, updateBackgroundMusic, playSound } from './src/sound.js';
+import { initControls, keys, virtualDir } from './src/control.js'; 
+import { lerp, getDirectionAngle, showToast } from './src/utils.js'; 
+import { applySlowDebuff, triggerCoinCollectEffect } from './src/effects.js';
+import { startCountdownTimer, showGameResults, sendReadyToRestart, showPausedTimer } from './src/timer.js';
 
 // --- GLOBAL CONSTANTS AND VARIABLES ---
 // Main config and runtime variables for client state
@@ -18,6 +21,9 @@ let hasJoined = false;
 
 let isGameReady = false;
 let isObserver = false;
+
+let isHost = false;           // Determine if it is a host
+let pausedByName = null;      // The name of the player who paused the game
 
 // Default client-side config (may be overridden by server)
 let gameConfig = {
@@ -41,7 +47,7 @@ const player = document.getElementById('player');
 const myCircle = document.getElementById('player-circle');
 
 // Store states for smooth interpolation of all other Pacmans
-const opponentStates = {}; // ключ - id игрока
+const opponentStates = {}; // key - player id
 
 // --- WEBSOCKET EVENT HANDLERS ---
 // Handles all incoming server messages and game events
@@ -52,6 +58,7 @@ ws.onmessage = (event) => {
 
     // Host is offered to start the game
     if (data.type === 'offer_start_game') {
+        isHost = true;
         const popup = document.getElementById('startGamePopup');
         const info = document.getElementById('connectedPlayersInfo');
         const btn = document.getElementById('startGameBtnByHost');
@@ -172,15 +179,39 @@ ws.onmessage = (event) => {
     }
 
     // Game was paused or unpaused
-    if (data.type === 'game_paused') showPauseOverlay(data.pausedBy);
-    if (data.type === 'game_unpaused') hidePauseOverlay();
+    if (data.type === 'game_paused') {
+        pausedByName = data.pausedBy;
+        showPauseOverlay(data.pausedBy);
+        showPausedTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum);
+    }
+    if (data.type === 'game_unpaused') {
+        pausedByName = null;
+        hidePauseOverlay();
+        startCountdownTimer(data.gameDuration, data.gameStartedAt, data.pauseAccum, lastReceivedPlayers, false);
+    }
+
+    if (data.type === 'host_changed') {
+        isHost = (playerId === data.hostId);
+        showToast(isHost ? "You are the new host!" : "New host assigned");
+    }
+
 
     // Main game state update: all players, points, scores, timer
     if (data.type === 'state') {
+        // Find the minimum corner among players
+        let minCorner = 4, hostId = null;
+        data.players.forEach(p => {
+            if (typeof p.corner === 'number' && p.corner < minCorner) {
+                minCorner = p.corner;
+                hostId = p.id;
+            }
+        });
+        isHost = (playerId === hostId);
+
         // Update your own player position/angle/color
         const me = data.players.find(p => p.id === playerId);
         if (me) {
-            // сохраняем серверную позицию и угол, чтобы плавно их догонять на клиенте
+            // we save the server position and angle to smoothly catch up with them on the client
             serverPos.x = me.x;
             serverPos.y = me.y;
             serverAngle = me.angle || 0;
@@ -346,15 +377,53 @@ ws.onmessage = (event) => {
     lastReceivedPlayers = data.players;
 };
 
+// --- MUTE/UNMUTE
+
+// --- Music/Sound toggle buttons: START MODAL ---
+const toggleMusicBtn = document.getElementById('toggleMusicBtn');
+const toggleSoundBtn = document.getElementById('toggleSoundBtn');
+
+// --- Music/Sound toggle buttons: PAUSE MODAL ---
+const pauseToggleMusicBtn = document.getElementById('pauseToggleMusicBtn');
+const pauseToggleSoundBtn = document.getElementById('pauseToggleSoundBtn');
+
+// Update button text by state
+function updateMusicBtns() {
+    const musicText = isMusicOn ? "🎵 Music: ON " : "🚫 Music: OFF";
+    if (toggleMusicBtn) toggleMusicBtn.textContent = musicText;
+    if (pauseToggleMusicBtn) pauseToggleMusicBtn.textContent = musicText;
+}
+function updateSoundBtns() {
+    const soundText = isSoundOn ? "🔊 Sounds: ON " : "🔇 Sounds: OFF";
+    if (toggleSoundBtn) toggleSoundBtn.textContent = soundText;
+    if (pauseToggleSoundBtn) pauseToggleSoundBtn.textContent = soundText;
+}
+
+// Click handling - both pairs of buttons duplicate the state
+if (toggleMusicBtn) toggleMusicBtn.onclick = function() {
+    setMusicOn(!isMusicOn);
+    updateMusicBtns();
+};
+if (pauseToggleMusicBtn) pauseToggleMusicBtn.onclick = function() {
+    setMusicOn(!isMusicOn);
+    updateMusicBtns();
+};
+
+if (toggleSoundBtn) toggleSoundBtn.onclick = function() {
+    setSoundOn(!isSoundOn);
+    updateSoundBtns();
+};
+if (pauseToggleSoundBtn) pauseToggleSoundBtn.onclick = function() {
+    setSoundOn(!isSoundOn);
+    updateSoundBtns();
+};
+
+// Initializing button text on boot
+updateMusicBtns();
+updateSoundBtns();
+
 
 // --- PLAYER RENDERING & ANIMATION ---
-/**
- * Returns angle in degrees based on movement vector.
- */
-function getDirectionAngle(dx, dy) {
-    //if (dx === 0 && dy === 0) return lastAngle;
-    return Math.atan2(dy, dx) * 180 / Math.PI;
-}
 
 // --- Interpolation of position and smooth animation of Pac-Man's mouth ---
 
@@ -379,9 +448,6 @@ setInterval(sendMove, 50);
 renderLoop();
 
 // --- Smooth mouth rendering and animation ---
-function lerp(a, b, t) {
-    return a + (b - a) * t;
-}
 
 function renderLoop() {
     // Interpolate position and angle (0.25 - smoothly over 4 frames)
@@ -507,42 +573,6 @@ initControls({
   sendMove: sendMove
 });
 
-/**
- * Applies a "slow" debuff (greys out player for duration in ms)
- */
-function applySlowDebuff(duration) {
-    const playerEl = document.getElementById('player-circle');
-    if (playerEl) playerEl.style.filter = 'grayscale(100%)';
-    setTimeout(() => {
-        if (playerEl) playerEl.style.filter = '';
-    }, duration);
-}
-
-/**
- * Visual sparkle effect when a coin is collected
- */
-function triggerCoinCollectEffect(x, y) {
-    const sparkle = document.createElement('div');
-    sparkle.className = 'sparkle';
-    sparkle.style.position = 'absolute';
-    sparkle.style.left = (x - 10) + 'px';
-    sparkle.style.top = (y - 10) + 'px';
-    sparkle.style.width = '20px';
-    sparkle.style.height = '20px';
-    sparkle.style.borderRadius = '50%';
-    sparkle.style.background = 'gold';
-    sparkle.style.opacity = '0.9';
-    sparkle.style.boxShadow = '0 0 20px gold';
-    sparkle.style.zIndex = 10;
-    sparkle.style.transition = 'all 0.3s ease-out';
-    document.getElementById('points').appendChild(sparkle);
-    setTimeout(() => {
-        sparkle.style.transform = 'scale(2)';
-        sparkle.style.opacity = '0';
-    }, 10);
-    setTimeout(() => sparkle.remove(), 300);
-}
-
 // --- START GAME / JOIN HANDLER ---
 /**
  * Handles start/join modal (player enters name, duration).
@@ -567,64 +597,6 @@ document.getElementById('startGameBtn').addEventListener('click', () => {
     }));
     hasJoined = true;
 });
-
-// --- TIMER & RESULTS ---
-/**
- * Starts and updates the countdown game timer
- */
-function startCountdownTimer(duration, startedAt, pauseAccum) {
-    const el = document.getElementById('game-timer');
-    if (!el) return;
-    if (timerInterval) clearInterval(timerInterval);
-    el.style.display = 'block';
-
-    function update() {
-        const now = Date.now();
-        const elapsed = Math.floor((now - startedAt - (pauseAccum || 0)) / 1000);
-        const remaining = Math.max(0, duration - elapsed);
-        const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
-        const seconds = String(remaining % 60).padStart(2, '0');
-        el.textContent = `Time: ${minutes}:${seconds}`;
-        if (remaining === 0) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-            el.textContent = 'Game Ended';
-            showGameResults(lastReceivedPlayers || []);
-        }
-    }
-
-    update(); // show immediately
-    timerInterval = setInterval(update, 1000);
-}
-
-/**
- * Shows end-of-game modal with player scores
- */
-function showGameResults(players) {
-    isGameReady = false;
-    const modal = document.getElementById('resultModal');
-    const list = document.getElementById('resultList');
-    modal.classList.remove('hidden');
-    const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-    list.innerHTML = sorted.map((p, i) => {
-        const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '🏅 4th'][i];
-        return `<div style="margin: 8px 0;"><strong>${place}:</strong> ${p.name || 'Player'} (${p.score || 0} pts)</div>`;
-    }).join('');
-    updateBackgroundMusic();
-}
-
-/**
- * Hide result modal and signal readiness to server for new game
- */
-function sendReadyToRestart() {
-    // Hide the window
-    const modal = document.getElementById('resultModal');
-    if (modal) modal.classList.add('hidden');
-    // Reload the page after a short delay
-    setTimeout(() => {
-        location.reload();
-    }, 200);
-}
 
 // --- PAUSE/RESUME/PlayAgain/Leave CONTROLS ---
 // Add event listeners for pause/resume (button or Pause key)
@@ -653,9 +625,23 @@ document.getElementById('quitBtn').addEventListener('click', () => {
  */
 function showPauseOverlay(pausedBy, canResume) {
     document.getElementById('pauseOverlay').classList.remove('hidden');
-    document.getElementById('pauseByText').textContent = `${pausedBy || 'Someone'} paused the game`;
-    const btn = document.getElementById('resumeBtn');
-    btn.style.display = canResume ? '' : 'none';
+    const pauseByText = document.getElementById('pauseByText');
+    pauseByText.innerHTML = `⏸ <span class="pause-who">${pausedBy || 'Someone'}</span> paused the game`;
+
+
+    // "Continue" is only visible to the person who paused
+    const btnResume = document.getElementById('resumeBtn');
+    btnResume.style.display = canResume ? '' : 'none';
+
+    // "Exit game"
+    const btnExit = document.getElementById('exitGameBtn');
+    //btnExit.style.display = (pausedBy === playerName) ? '' : 'none';
+    btnExit.style.display = '';
+
+    // "Stop game" - for host only
+    const btnStop = document.getElementById('stopGameBtn');
+    btnStop.style.display = isHost ? '' : 'none';
+
     updateBackgroundMusic();
 }
 
@@ -664,8 +650,34 @@ function showPauseOverlay(pausedBy, canResume) {
  */
 function hidePauseOverlay() {
     document.getElementById('pauseOverlay').classList.add('hidden');
+    document.getElementById('resumeBtn').style.display = 'none';
+    document.getElementById('exitGameBtn').style.display = 'none';
+    document.getElementById('stopGameBtn').style.display = 'none';
     updateBackgroundMusic();
 }
+
+/*
+    Exit game from pause overlay
+*/
+function handleQuitWithUnpause() {
+    // Unpause
+    ws.send(JSON.stringify({ type: 'unpause_game' }));
+
+    // Then quit
+    ws.send(JSON.stringify({
+        type: 'player_quit',
+        id: playerId,
+        name: playerName
+    }));
+
+    location.reload();
+}
+
+document.getElementById('exitGameBtn').addEventListener('click', handleQuitWithUnpause);
+
+document.getElementById('stopGameBtn').addEventListener('click', () => {
+    ws.send(JSON.stringify({ type: 'stop_game_by_host' }));
+});
 
 document.getElementById('howToPlayBtn').addEventListener('click', () => {
     document.getElementById('howToPlayModal').classList.remove('hidden');
@@ -706,6 +718,7 @@ function showCountdownThenStart(duration, startedAt, pauseAccum) {
         }
     }, 1000);
 }
+
 /*
     Quit button handler
 */
@@ -720,35 +733,3 @@ document.getElementById('quitBtn').addEventListener('click', () => {
 
     location.reload();
 });
-
-/*
-    Toast message handler
-*/
-
-function showToast(text) {
-    const box = document.createElement('div');
-    box.textContent = text;
-    Object.assign(box.style, {
-        position: 'absolute',
-        top: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: '#222',
-        color: '#fff',
-        padding: '8px 18px',
-        borderRadius: '8px',
-        fontSize: '18px',
-        zIndex: 9999,
-        opacity: 0,
-        transition: 'opacity 0.3s',
-    });
-
-    document.body.appendChild(box);
-    requestAnimationFrame(() => (box.style.opacity = 1));
-    setTimeout(() => {
-        box.style.opacity = 0;
-        setTimeout(() => box.remove(),300)
-    },2500)
-}
-
-

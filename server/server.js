@@ -23,6 +23,7 @@ const START_POSITIONS = [
 let points = [];
 let players = {};
 let cornerOccupants = [null, null, null, null];
+let hostId = null;
 
 // Pause state variables
 let gamePaused = false;
@@ -134,6 +135,7 @@ wss.on('connection', (ws) => {
       delete players[playerId];
       broadcastPlayerQuit(leaverName);
       broadcastGameState();
+      recalculateAndBroadcastHost();
       return;
     }
 
@@ -205,6 +207,11 @@ wss.on('connection', (ws) => {
         readyToRestart: false,
         lastMoveAt: Date.now()
       };
+
+      if (isFirstPlayer) {
+        hostId = playerId;
+      }
+
 
       const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
       // If there are at least 2 players, prompt host to start game
@@ -353,6 +360,7 @@ wss.on('connection', (ws) => {
             client.send(JSON.stringify({ type: 'ready_to_choose_duration' }));
         });
         broadcastGameState();
+        recalculateAndBroadcastHost();
       }
       if (gameEndTimeout) clearTimeout(gameEndTimeout);
       return;
@@ -430,6 +438,16 @@ wss.on('connection', (ws) => {
       }
       return;
     }
+
+    // --- STOP GAME BY HOST ---
+    if (data.type === 'stop_game_by_host' && playerId && players[playerId]) {
+        //const isHost = players[playerId].corner === 0;
+        const isHost = (playerId === hostId);
+        if (isHost && gameConfig.gameStarted) {
+            gameOverFunc();
+        }
+        return;
+    }
   });
 
   /**
@@ -443,9 +461,10 @@ wss.on('connection', (ws) => {
       delete players[playerId];
 
       broadcastPlayerQuit(leaverName);
-
       broadcastGameState();
+      recalculateAndBroadcastHost();
     }
+    /*
     // Reset game state if all players left
     if (Object.keys(players).length === 0) {
       generatePoints();
@@ -457,9 +476,24 @@ wss.on('connection', (ws) => {
       gamePaused = false;
       pausedBy = null;
     }
+      */
+    // If all players left, notify all clients (including observers) about game over
+    if (Object.keys(players).length === 0 && gameConfig.gameStarted) {
+      // gameConfig.gameStarted - чтобы не было лишнего game_over между играми
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          // Шлём пустой список игроков (никого не осталось)
+          client.send(JSON.stringify({ type: 'game_over', players: [] }));
+        }
+      });
+      fullResetGameState();
+    }
   });
 });
-
+/**
+ * Fully resets all global game state to the initial state.
+ * Called when a game ends, or all players leave the game.
+ */
 function fullResetGameState() {
     players = {};
     cornerOccupants = [null, null, null, null];
@@ -472,10 +506,16 @@ function fullResetGameState() {
     pausedBy = null;
     gameTimeLeftMs = null;
     gameEndAt = null;
+    hostId = null;
+
     if (gameEndTimeout) clearTimeout(gameEndTimeout);
     generatePoints();
 }
 
+/**
+ * Called when the game is over (time is up or host stops the game).
+ * Sends final scores to all players and resets the game state.
+ */
 function gameOverFunc() {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN)
@@ -483,6 +523,31 @@ function gameOverFunc() {
   });
   fullResetGameState();
   broadcastGameState();
+}
+
+/**
+ * Calculates the player who should be the new host (player with the smallest occupied corner).
+ * Notifies all clients of the new host if there are still players in the game.
+ */
+function recalculateAndBroadcastHost() {
+    // Find the player with the minimal occupied corner
+    let minCorner = 4;
+    let newHostId = null;
+    for (let i = 0; i < cornerOccupants.length; i++) {
+        if (cornerOccupants[i] !== null && i < minCorner) {
+            minCorner = i;
+            newHostId = cornerOccupants[i];
+        }
+    }
+    hostId = newHostId;
+    // If there are players left, broadcast the new host ID to all clients
+    if (newHostId) {
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ type: 'host_changed', hostId: newHostId }));
+            }
+        });
+    }
 }
 
 // Initial game setup at server start

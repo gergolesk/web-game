@@ -320,3 +320,20 @@ body {
 }
 
 .hidden { display: none !important; }
+
+.pause-by-text {
+  color: #ffe066;
+  font-size: 1.35em;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  text-align: center;
+  margin: 16px 0 20px 0;
+}
+
+.pause-by-text .pause-who {
+  color: #ffd700;
+  font-weight: 700;
+  font-size: 1.18em;
+  text-shadow: 0 1px 5px #2227;
+  padding: 0 3px;
+}
