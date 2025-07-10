@@ -36,7 +36,10 @@ let gameConfig = {
 };
 
 // Create WebSocket connection to game server
-const ws = new WebSocket('ws://' + window.location.hostname + ':3000');
+//const ws = new WebSocket('ws://' + window.location.hostname + ':3000');
+const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${wsProtocol}://${window.location.hostname}:3000`);
+
 
 // Local movement state and references to DOM elements
 let pos = {x: 100, y: 100};
