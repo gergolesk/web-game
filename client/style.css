@@ -357,7 +357,7 @@ body {
   }
 
   #game-area {
-    margin: 110px auto 0;
+    margin: 80px auto 0;
   }
 
   #sidebar {
@@ -376,8 +376,23 @@ body {
 
   #joystick {
     position: absolute;
-    bottom: 200px;
+    bottom: 250px;
     left: 0;
     right: 0;
+  }
+
+  #pauseBtn, #quitBtn, #players-list {
+    height: 32px;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  #pauseBtn span, #quitBtn span {
+    display: none;
+  }
+
+
+  #game-timer {
+    font-size: 15px;
   }
 }

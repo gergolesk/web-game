@@ -735,6 +735,37 @@ function showCountdownThenStart(duration, startedAt, pauseAccum) {
     }, 1000);
 }
 
+function scaleAndCenterGameArea() {
+    const gameArea = document.getElementById('game-area');
+    // const wrapper = document.getElementById('game-wrapper');
+
+    if (window.innerWidth > 768) {
+        // if desktop we reset all styles
+        gameArea.style.transform = '';
+        gameArea.style.left = '';
+        gameArea.style.top = '';
+        gameArea.style.position = '';
+        return;
+    }
+
+    const scaleX = window.innerWidth / 800;
+    const scaleY = window.innerHeight / 600;
+    const scale = Math.min(scaleX, scaleY, 0.5);
+
+    gameArea.style.transform = `scale(${scale})`;
+    gameArea.style.transformOrigin = 'top left';
+
+    const offsetX = (window.innerWidth - 800 * scale) / 2;
+    const offsetY = (window.innerHeight - 600 * scale) / 2;
+
+    gameArea.style.position = 'absolute';
+    gameArea.style.left = `${offsetX}px`;
+    gameArea.style.top = `100px`;
+}
+
+window.addEventListener('resize', scaleAndCenterGameArea);
+window.addEventListener('load', scaleAndCenterGameArea);
+
 /*
     Quit button handler
 */
