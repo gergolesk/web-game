@@ -1,8 +1,25 @@
+import express from 'express';
+import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import WebSocket, { WebSocketServer } from 'ws';
 import { gameConfig, PLAYER_COLORS } from './config.js';
 
+// Для __dirname в ES-модулях
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const server = http.createServer(app);
+
+// 1. Обслуживаем клиентскую статику
+app.use(express.static(path.join(__dirname, '../client')));
+
+// 2. WebSocket сервер на том же сервере, путь /ws
+const wss = new WebSocketServer({ server, path: '/ws' });
+
 // Create WebSocket server
-const wss = new WebSocketServer({ port: 3000 });
+//const wss = new WebSocketServer({ port: 3000 });
 
 // Game field and player setup constants
 const FIELD_WIDTH = gameConfig.FIELD_WIDTH;
@@ -553,3 +570,15 @@ function recalculateAndBroadcastHost() {
 // Initial game setup at server start
 generatePoints();
 console.log('WebSocket server launched on ws://localhost:3000');
+
+
+// 3. Ловим все несуществующие маршруты и отдаём index.html (для SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/index.html'));
+});
+
+// 4. Стартуем сервер
+const PORT = 5500;
+server.listen(PORT, () => {
+  console.log(`Game server + frontend running on port ${PORT}`);
+});

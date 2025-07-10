@@ -1,17 +1,8 @@
 {
-  "name": "web-game",
-  "version": "1.0.0",
-  "description": "",
-  "dependencies": {
-    "ws": "^8.18.2"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
-    "http-server": "^14.1.1"
-  },
   "scripts": {
-    "server": "node server/server.js",
-    "client": "http-server ./client --port 5500",
-    "start": "concurrently -k \"npm run server\" \"npm run client\""
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
   }
 }
