@@ -5,6 +5,11 @@ import { initControls, keys, virtualDir } from './src/control.js';
 import { lerp, getDirectionAngle, showToast } from './src/utils.js'; 
 import { applySlowDebuff, triggerCoinCollectEffect } from './src/effects.js';
 import { startCountdownTimer, showGameResults, sendReadyToRestart, showPausedTimer } from './src/timer.js';
+import { initFPSMonitor } from './src/fpsmonitor.js';
+
+//URL params
+const urlParams = new URLSearchParams(window.location.search);
+const debugMode = urlParams.get('fps') === 'true';
 
 // --- GLOBAL CONSTANTS AND VARIABLES ---
 // Main config and runtime variables for client state
@@ -451,9 +456,15 @@ let mouthSpeed = 3.5; // number of "open-close" per second
 // For collisions we use the server position (this is important for collecting coins)
 let mouthOpen = true; // this flag is only needed for sending to the server
 
+//FPS monitor in debug mode
+if (debugMode) {
+    initFPSMonitor();
+}
+
 /**
  * Animates Pac-Man's mouth open/close while moving.
  */
+
 
 setInterval(sendMove, 50);
 renderLoop();
