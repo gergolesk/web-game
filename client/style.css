@@ -348,7 +348,7 @@ body {
 }
 
 /* For very small screens - you can reduce the paddings */
-@media (max-width: 768px) {
+@media (max-width: 820px) {
   #howToPlayModal .modal-content {
     padding: 14px 8px;
     font-size: 0.98em;
@@ -376,9 +376,9 @@ body {
 
   #joystick {
     position: absolute;
-    bottom: 250px;
-    left: 0;
-    right: 0;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   #pauseBtn, #quitBtn, #players-list {

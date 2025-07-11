@@ -298,7 +298,8 @@ ws.onmessage = (event) => {
         });
 
         // Render player list/scores
-        let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
+        let fontSize = window.innerWidth <= 820 ? '14px' : '20px';
+        let playersListHtml = `<div style="font-weight:bold;margin-bottom:8px;font-size:${fontSize};">Players</div>`;
         data.players.forEach(p => {
             let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
             playersListHtml += `<div class="${playerClass}">
@@ -750,7 +751,7 @@ function scaleAndCenterGameArea() {
 
     const scaleX = window.innerWidth / 800;
     const scaleY = window.innerHeight / 600;
-    const scale = Math.min(scaleX, scaleY, 0.5);
+    const scale = Math.min(scaleX, scaleY, 0.45);
 
     gameArea.style.transform = `scale(${scale})`;
     gameArea.style.transformOrigin = 'top left';
