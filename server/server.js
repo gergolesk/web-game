@@ -558,18 +558,22 @@ function notifyHostAboutPlayersCount() {
     if (hostId) {
         const hostSocket = [...wss.clients].find(client => client.playerId === hostId);
         if (hostSocket && hostSocket.readyState === WebSocket.OPEN) {
-            if (connectedPlayersCount < 2) {
-                hostSocket.send(JSON.stringify({
-                    type: 'waiting_for_players',
-                    isFirstPlayer: true,
-                    duration: gameConfig.duration
-                }));
-            } else {
-                hostSocket.send(JSON.stringify({
-                    type: 'offer_start_game',
-                    count: connectedPlayersCount
-                }));
+            // Показывать "ожидание" только если игра не началась
+            if (!gameConfig.gameStarted) {
+                if (connectedPlayersCount < 2) {
+                    hostSocket.send(JSON.stringify({
+                        type: 'waiting_for_players',
+                        isFirstPlayer: true,
+                        duration: gameConfig.duration
+                    }));
+                } else {
+                    hostSocket.send(JSON.stringify({
+                        type: 'offer_start_game',
+                        count: connectedPlayersCount
+                    }));
+                }
             }
+            // Если игра уже идет, ничего не отправляем!
         }
     }
 }
