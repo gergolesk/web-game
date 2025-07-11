@@ -153,6 +153,7 @@ wss.on('connection', (ws) => {
       broadcastPlayerQuit(leaverName);
       broadcastGameState();
       recalculateAndBroadcastHost();
+      notifyHostAboutPlayersCount();
       return;
     }
 
@@ -408,7 +409,7 @@ wss.on('connection', (ws) => {
             }));
         });
         broadcastGameState();
-      }
+      } 
       return;
     }
 
@@ -480,6 +481,7 @@ wss.on('connection', (ws) => {
       broadcastPlayerQuit(leaverName);
       broadcastGameState();
       recalculateAndBroadcastHost();
+      notifyHostAboutPlayersCount();
     }
     /*
     // Reset game state if all players left
@@ -566,6 +568,33 @@ function recalculateAndBroadcastHost() {
         });
     }
 }
+
+
+function notifyHostAboutPlayersCount() {
+    const connectedPlayersCount = cornerOccupants.filter(id => id !== null).length;
+    if (hostId) {
+        const hostSocket = [...wss.clients].find(client => client.playerId === hostId);
+        if (hostSocket && hostSocket.readyState === WebSocket.OPEN) {
+            // Показывать "ожидание" только если игра не началась
+            if (!gameConfig.gameStarted) {
+                if (connectedPlayersCount < 2) {
+                    hostSocket.send(JSON.stringify({
+                        type: 'waiting_for_players',
+                        isFirstPlayer: true,
+                        duration: gameConfig.duration
+                    }));
+                } else {
+                    hostSocket.send(JSON.stringify({
+                        type: 'offer_start_game',
+                        count: connectedPlayersCount
+                    }));
+                }
+            }
+            // Если игра уже идет, ничего не отправляем!
+        }
+    }
+}
+ 
 
 // Initial game setup at server start
 generatePoints();

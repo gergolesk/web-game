@@ -337,3 +337,62 @@ body {
   text-shadow: 0 1px 5px #2227;
   padding: 0 3px;
 }
+
+/* Size and scroll limitation for the instruction window */
+#howToPlayModal .modal-content {
+  max-height: 90vh;         /* no more than 90% of screen height */
+  overflow-y: auto;         /* vertical scroll if needed */
+  width: 96vw;              /* on mobile - almost the entire width */
+  max-width: 420px;         
+  box-sizing: border-box;
+}
+
+/* For very small screens - you can reduce the paddings */
+@media (max-width: 820px) {
+  #howToPlayModal .modal-content {
+    padding: 14px 8px;
+    font-size: 0.98em;
+    min-width: unset;
+    max-width: 99vw;
+  }
+
+  #game-area {
+    margin: 80px auto 0;
+  }
+
+  #sidebar {
+    min-width: auto;
+    height: auto;
+  }
+
+  .sidebar-inner {
+    display: flex;
+    position: absolute;
+    gap: 15px;
+    top: 15px;
+    left: 10px;
+    right: 10px;
+  }
+
+  #joystick {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  #pauseBtn, #quitBtn, #players-list {
+    height: 32px;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  #pauseBtn span, #quitBtn span {
+    display: none;
+  }
+
+
+  #game-timer {
+    font-size: 15px;
+  }
+}

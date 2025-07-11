@@ -83,7 +83,7 @@ ws.onmessage = (event) => {
         showCountdownThenStart();
         updateBackgroundMusic();
     }
-
+   
     // Server sent new game config (field, speed, etc)
     if (data.type === 'game_config') {
         gameConfig = data.config;
@@ -121,29 +121,36 @@ ws.onmessage = (event) => {
     // Show modal waiting for players to join, controls game duration selection
     if (data.type === 'waiting_for_players') {
         const isFirst = data.isFirstPlayer;
-        const durationSet = typeof data.duration === 'number';
 
-        // Hide the start modal
-        document.getElementById('startModal').style.display = 'none';
-        //Disable button
-        document.getElementById('startGameBtnByHost').disabled = true;
+       // Always hide the "Waiting for start" mod for regular players
+        document.getElementById('waitingForHostModal').classList.add('hidden');
+        // Hide the start popup (just in case)
+        document.getElementById('startGamePopup').classList.add('hidden');
 
         if (isFirst) {
-            // Show the host the "Start Game" modal
+            // If it is a host, show the host popup with the desired inscription and an INactive button
             document.getElementById('startGamePopup').classList.remove('hidden');
+            const info = document.getElementById('connectedPlayersInfo');
+            info.textContent = "Waiting for other players to join...";
+            document.getElementById('startGameBtnByHost').disabled = true;
         } else {
-            // Show the non-host the waiting modal
+            // For a regular player, we show the "Waiting for Host" modal
             document.getElementById('waitingForHostModal').classList.remove('hidden');
         }
-        updateBackgroundMusic();
 
+        // duration/name update if there are fields (just in case)
         document.getElementById('playerNameInput').value = playerName || '';
         const durationInput = document.getElementById('gameDurationInput');
-        durationInput.value = data.duration || 60;
-        durationInput.disabled = !isFirst || durationSet;
-        durationInput.parentElement.style.opacity = (!isFirst || durationSet) ? '0.5' : '1';
-        durationInput.parentElement.style.display = (!isFirst || durationSet) ? 'none' : 'block';
+        if (durationInput) {
+            durationInput.value = data.duration || 60;
+            durationInput.disabled = true;
+            durationInput.parentElement.style.opacity = '0.5';
+            durationInput.parentElement.style.display = 'none';
+        }
+
+        updateBackgroundMusic();
     }
+
 
     if (data.type === 'name_taken') {
         alert('This name is already taken. Please choose another one.');
@@ -291,7 +298,8 @@ ws.onmessage = (event) => {
         });
 
         // Render player list/scores
-        let playersListHtml = '<div style="font-weight:bold;margin-bottom:8px;font-size:20px;">Players</div>';
+        let fontSize = window.innerWidth <= 820 ? '14px' : '20px';
+        let playersListHtml = `<div style="font-weight:bold;margin-bottom:8px;font-size:${fontSize};">Players</div>`;
         data.players.forEach(p => {
             let playerClass = (p.id === playerId) ? 'player-row player-me' : 'player-row';
             playersListHtml += `<div class="${playerClass}">
@@ -659,14 +667,7 @@ function hidePauseOverlay() {
     updateBackgroundMusic();
 }
 
-/*
-    Exit game from pause overlay
-*/
-function handleQuitWithUnpause() {
-    // Unpause
-    ws.send(JSON.stringify({ type: 'unpause_game' }));
-
-    // Then quit
+function handleQuit() {
     ws.send(JSON.stringify({
         type: 'player_quit',
         id: playerId,
@@ -676,7 +677,20 @@ function handleQuitWithUnpause() {
     location.reload();
 }
 
+/*
+    Exit game from pause overlay
+*/
+function handleQuitWithUnpause() {
+    // Unpause
+    ws.send(JSON.stringify({ type: 'unpause_game' }));
+    //Then quit
+    handleQuit();
+}
+
+// Quit buttons handlers
 document.getElementById('exitGameBtn').addEventListener('click', handleQuitWithUnpause);
+document.getElementById('quitBtn').addEventListener('click', handleQuit);
+document.getElementById('exitGameBtnWaiting').addEventListener('click', handleQuit);
 
 document.getElementById('stopGameBtn').addEventListener('click', () => {
     ws.send(JSON.stringify({ type: 'stop_game_by_host' }));
@@ -722,9 +736,41 @@ function showCountdownThenStart(duration, startedAt, pauseAccum) {
     }, 1000);
 }
 
+function scaleAndCenterGameArea() {
+    const gameArea = document.getElementById('game-area');
+    // const wrapper = document.getElementById('game-wrapper');
+
+    if (window.innerWidth > 768) {
+        // if desktop we reset all styles
+        gameArea.style.transform = '';
+        gameArea.style.left = '';
+        gameArea.style.top = '';
+        gameArea.style.position = '';
+        return;
+    }
+
+    const scaleX = window.innerWidth / 800;
+    const scaleY = window.innerHeight / 600;
+    const scale = Math.min(scaleX, scaleY, 0.45);
+
+    gameArea.style.transform = `scale(${scale})`;
+    gameArea.style.transformOrigin = 'top left';
+
+    const offsetX = (window.innerWidth - 800 * scale) / 2;
+    const offsetY = (window.innerHeight - 600 * scale) / 2;
+
+    gameArea.style.position = 'absolute';
+    gameArea.style.left = `${offsetX}px`;
+    gameArea.style.top = `100px`;
+}
+
+window.addEventListener('resize', scaleAndCenterGameArea);
+window.addEventListener('load', scaleAndCenterGameArea);
+
 /*
     Quit button handler
 */
+/*
 document.getElementById('quitBtn').addEventListener('click', () => {
     ws.send(
         JSON.stringify({
@@ -736,3 +782,4 @@ document.getElementById('quitBtn').addEventListener('click', () => {
 
     location.reload();
 });
+*/
