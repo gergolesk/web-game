@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PACMAN Arena Multiplayer</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
   <div id="game-area">
     <svg id="player" width="40" height="40" style="position:absolute; z-index:2;">
       <defs>
@@ -24,10 +26,11 @@
     <div id="other-players"></div>
     <div id="points"></div>
   </div>
+
   
   <!-- Sidebar with timer, players, pause and joystick -->
   <div id="sidebar">
-    <div>
+    <div class="sidebar-inner">
       <div id="game-timer" class="game-timer">Time: 00:00</div>
       <div id="players-list"></div>
       <button id="pauseBtn"><span>⏸</span> Pause</button>

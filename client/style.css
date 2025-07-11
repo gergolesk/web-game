@@ -348,11 +348,51 @@ body {
 }
 
 /* For very small screens - you can reduce the paddings */
-@media (max-width: 500px) {
+@media (max-width: 820px) {
   #howToPlayModal .modal-content {
     padding: 14px 8px;
     font-size: 0.98em;
     min-width: unset;
     max-width: 99vw;
+  }
+
+  #game-area {
+    margin: 80px auto 0;
+  }
+
+  #sidebar {
+    min-width: auto;
+    height: auto;
+  }
+
+  .sidebar-inner {
+    display: flex;
+    position: absolute;
+    gap: 15px;
+    top: 15px;
+    left: 10px;
+    right: 10px;
+  }
+
+  #joystick {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  #pauseBtn, #quitBtn, #players-list {
+    height: 32px;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  #pauseBtn span, #quitBtn span {
+    display: none;
+  }
+
+
+  #game-timer {
+    font-size: 15px;
   }
 }
